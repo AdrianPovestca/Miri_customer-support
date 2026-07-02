@@ -6,8 +6,8 @@ Main application entry point.
 
 from loader import load_documents
 from retriever import search
+from responder import generate_response
 from prompts import WELCOME_MESSAGE
-
 
 def show_banner():
     """Display the application banner."""
