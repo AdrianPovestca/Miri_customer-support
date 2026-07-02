@@ -18,7 +18,7 @@ def show_banner():
 
 
 def main():
-    """Main application."""
+    """Run the chatbot."""
 
     show_banner()
 
@@ -27,25 +27,26 @@ def main():
     print(f"\nKnowledge base loaded: {len(documents)} document(s)\n")
 
     for document in documents:
-        print(f"• {document['filename']}")
+        print(f"• {document.filename}")
 
-    print("\n" + "-" * 40)
+    print("\n" + "-" * 50)
     print(WELCOME_MESSAGE)
 
     while True:
 
-        query = input("You: ")
+        query = input("You: ").strip()
 
         if query.lower() == "exit":
-            print("\nGoodbye! 👋")
+            print("\nAssistant:")
+            print("Goodbye! 👋")
             break
 
-        results = search(query)
-
-        if not results:
+        if not query:
             print("\nAssistant:")
-            print("Sorry, I couldn't find any relevant information.\n")
+            print("Please enter a question.\n")
             continue
+
+        results = search(query)
 
         response = generate_response(results)
 
@@ -53,9 +54,6 @@ def main():
         print(response)
         print()
 
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()
