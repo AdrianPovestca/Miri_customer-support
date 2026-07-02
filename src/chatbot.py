@@ -28,17 +28,30 @@ def main():
     for document in documents:
         print(f"• {document['filename']}")
 
-print("\n" + "-" * 40)
-print(WELCOME_MESSAGE)
+    print("\n" + "-" * 40)
+    print(WELCOME_MESSAGE)
 
-while True:
+    while True:
 
-    query = input("You: ")
+        query = input("You: ")
 
-    if query.lower() == "exit":
-        print("\nGoodbye! 👋")
-        break
+        if query.lower() == "exit":
+            print("\nGoodbye! 👋")
+            break
 
+        results = search(query)
+
+        if not results:
+            print("\nAssistant:")
+            print("Sorry, I couldn't find any relevant information.\n")
+            continue
+
+        print("\nAssistant found these relevant document(s):")
+
+        for item in results:
+            print(f"- {item['document']['filename']} (score: {item['score']})")
+
+        print()
 
 if __name__ == "__main__":
     main()
