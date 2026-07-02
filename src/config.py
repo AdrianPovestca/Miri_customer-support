@@ -5,6 +5,10 @@ This module stores global configuration values used throughout the project.
 """
 
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --------------------------------------------------
 # Project Information
@@ -34,3 +38,5 @@ TOP_K_RESULTS = 3
 TEMPERATURE = 0.2
 
 MAX_TOKENS = 1000
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
