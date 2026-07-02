@@ -5,13 +5,19 @@ This is the first version of our retrieval system.
 Later it will be replaced with semantic search using embeddings.
 """
 
-from loader import load_documents
 from config import TOP_K_RESULTS
+from loader import load_documents
 
 
 def search(query: str):
     """
     Search the knowledge base using simple keyword matching.
+
+    Args:
+        query (str): User question.
+
+    Returns:
+        list: Ranked search results.
     """
 
     query = query.lower()
@@ -26,7 +32,7 @@ def search(query: str):
 
         words = query.split()
 
-        content = document["content"].lower()
+        content = document.content.lower()
 
         for word in words:
 
