@@ -5,6 +5,8 @@ Main application entry point.
 """
 
 from loader import load_documents
+from retriever import search
+from prompts import WELCOME_MESSAGE
 
 
 def show_banner():
@@ -25,6 +27,17 @@ def main():
 
     for document in documents:
         print(f"• {document['filename']}")
+
+print("\n" + "-" * 40)
+print(WELCOME_MESSAGE)
+
+while True:
+
+    query = input("You: ")
+
+    if query.lower() == "exit":
+        print("\nGoodbye! 👋")
+        break
 
 
 if __name__ == "__main__":
