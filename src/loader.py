@@ -4,7 +4,6 @@ Document Loader
 Loads all Markdown files from the knowledge base.
 """
 
-from pathlib import Path
 
 from config import KNOWLEDGE_BASE_DIR
 
