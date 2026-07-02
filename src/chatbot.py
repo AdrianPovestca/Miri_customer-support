@@ -9,6 +9,7 @@ from retriever import search
 from responder import generate_response
 from prompts import WELCOME_MESSAGE
 
+
 def show_banner():
     """Display the application banner."""
     print("=" * 50)
@@ -46,12 +47,15 @@ def main():
             print("Sorry, I couldn't find any relevant information.\n")
             continue
 
-        print("\nAssistant found these relevant document(s):")
+        response = generate_response(results)
 
-        for item in results:
-            print(f"- {item['document']['filename']} (score: {item['score']})")
-
+        print("\nAssistant:\n")
+        print(response)
         print()
+
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
