@@ -6,6 +6,7 @@ Later it will be replaced with semantic search using embeddings.
 """
 
 from loader import load_documents
+from config import TOP_K_RESULTS
 
 
 def search(query: str):
@@ -46,4 +47,4 @@ def search(query: str):
         reverse=True,
     )
 
-    return results
+    return results[:TOP_K_RESULTS]
