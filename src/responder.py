@@ -2,10 +2,18 @@
 Response generator for the AI Customer Support Playbook.
 """
 
+from models import Document
+
 
 def generate_response(results):
     """
-    Generate a response from the retrieved documents.
+    Generate a response from the highest-ranked document.
+
+    Args:
+        results (list): Search results returned by the retriever.
+
+    Returns:
+        str: Response shown to the user.
     """
 
     if not results:
@@ -14,6 +22,11 @@ def generate_response(results):
             "knowledge base."
         )
 
-    best_document = results[0]["document"]
+    best_document: Document = results[0]["document"]
 
-    return best_document["content"]
+    response = (
+        f"📄 {best_document.title}\n\n"
+        f"{best_document.content}"
+    )
+
+    return response
