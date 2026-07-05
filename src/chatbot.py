@@ -93,7 +93,7 @@ def run_chatbot() -> None:
             search_results = search(user_input)
 
             # Generate and display response
-            response = generate_response(search_results)
+          response = generate_response(search_results, user_input)
 
             print("\nAssistant:")
             print(response)
