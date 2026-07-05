@@ -1,56 +1,55 @@
 """
-Prompt templates for the AI Customer Support Assistant.
+prompts.py
+----------
+Prompt templates used to turn retrieved knowledge base entries into a
+natural, grounded answer via the OpenAI API.
 """
 
-SYSTEM_PROMPT = """
-You are an AI Customer Support Assistant for an online shoe store.
+from typing import List
+from models import Document
 
-Your responsibilities are:
+SYSTEM_PROMPT = """You are a helpful, friendly customer support assistant for an online shoe store.
 
-- Always answer in the same language used by the customer.
-- Answer customer questions politely and professionally.
-- Use ONLY information from the provided knowledge base.
-- Never invent information or make up facts.
-- If information is missing, clearly state that you don't know.
-- Recommend contacting human support when necessary.
-- Keep answers clear, concise, and helpful.
-- Format responses with proper markdown for readability.
+Rules you must always follow:
+- Answer ONLY using the information provided in the "Knowledge base context" below.
+- If the context does not contain enough information to answer, say so honestly and
+  suggest the customer contact human support — do NOT make up policies, prices, or timelines.
+- Keep answers short, warm, and easy to read (2-5 sentences, or a short list if steps are involved).
+- Do not mention "the context" or "the documents" to the customer; just answer naturally,
+  as a support agent who already knows this information.
 """
 
-WELCOME_MESSAGE = """
-Hello! 👋
 
-I'm your AI Customer Support Assistant. I'm here to help you with questions about:
-- Account management and login
-- Orders and tracking
-- Shipping information
-- Returns and exchanges
-- Refunds and credits
-- Payments and billing
-- Products and sizing
-- Technical support
-- General FAQs
+def build_context_block(documents: List[Document]) -> str:
+    """Turn retrieved Document objects into a numbered context block for the prompt."""
+    if not documents:
+        return "(no relevant knowledge base entries were found)"
 
-How can I help you today?
-"""
+    blocks = []
+    for i, doc in enumerate(documents, start=1):
+        blocks.append(
+            f"[{i}] Category: {doc.category}\n"
+            f"Q: {doc.question}\n"
+            f"A: {doc.answer}"
+        )
+    return "\n\n".join(blocks)
 
-GOODBYE_MESSAGE = """
-Goodbye! 👋
 
-Thank you for using our customer support chatbot. If you need further assistance,
-please contact our support team at support@shoesstore.com or call 1-800-SHOES-NOW.
-"""
+def build_user_prompt(query: str, documents: List[Document]) -> str:
+    """Build the final user-turn prompt sent to the model."""
+    context = build_context_block(documents)
+    return (
+        f"Knowledge base context:\n{context}\n\n"
+        f"Customer question: {query}\n\n"
+        f"Write the reply to the customer now."
+    )
 
-NO_RESULTS_MESSAGE = """
-Sorry, I couldn't find any relevant information for your question.
 
-Please try:
-- Rewording your question
-- Using different keywords
-- Checking our FAQs at support@shoesstore.com
-
-If you still need help, our human support team is available:
-- Email: support@shoesstore.com
-- Phone: 1-800-SHOES-NOW
-- Hours: Monday-Friday 9am-6pm EST, Saturday-Sunday 10am-4pm EST
-"""
+def build_no_match_prompt(query: str) -> str:
+    """Used when retrieval found nothing above the score threshold."""
+    return (
+        "No relevant knowledge base entries were found for this question.\n\n"
+        f"Customer question: {query}\n\n"
+        "Politely tell the customer you don't have that information on hand and "
+        "suggest they reach out to human support for a definitive answer."
+    )
