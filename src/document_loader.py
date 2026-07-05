@@ -1,74 +1,66 @@
 """
-Document loader for loading markdown files from the knowledge base.
-
-This module reads all markdown files from the knowledge_base directory
-and converts them into Document objects for retrieval and searching.
+document_loader.py
+-------------------
+Loads markdown files from the knowledge_base/ folder and parses them into
+Document objects (see models.py). Replaces the previous loader.py duplicate.
 """
 
-import logging
+import re
 from pathlib import Path
 from typing import List
 
-from config import KNOWLEDGE_BASE_DIR
-from document import Document
+from models import Document
+from logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+# Matches "# Category Title"
+CATEGORY_PATTERN = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+# Matches "## Question?" followed by everything up to the next "## " or end of file
+QA_PATTERN = re.compile(r"^##\s+(.+?)\n(.*?)(?=^##\s+|\Z)", re.MULTILINE | re.DOTALL)
 
 
-def load_documents() -> List[Document]:
-    """
-    Load all markdown documents from the knowledge base directory.
+class DocumentLoader:
+    """Loads and parses all markdown files in a knowledge base directory."""
 
-    Returns:
-        List of Document objects loaded from markdown files
+    def __init__(self, knowledge_base_dir: str):
+        self.knowledge_base_dir = Path(knowledge_base_dir)
 
-    Raises:
-        FileNotFoundError: If knowledge_base directory doesn't exist
-        UnicodeDecodeError: If file encoding is invalid
-    """
-    logger.info(f"Loading documents from {KNOWLEDGE_BASE_DIR}")
+    def load_all(self) -> List[Document]:
+        """Load every .md file in the knowledge base directory."""
+        if not self.knowledge_base_dir.exists():
+            logger.error(f"Knowledge base directory not found: {self.knowledge_base_dir}")
+            return []
 
-    if not KNOWLEDGE_BASE_DIR.exists():
-        logger.warning(f"Knowledge base directory not found: {KNOWLEDGE_BASE_DIR}")
-        return []
+        documents: List[Document] = []
+        md_files = sorted(self.knowledge_base_dir.glob("*.md"))
 
-    documents: List[Document] = []
-    markdown_files = sorted(KNOWLEDGE_BASE_DIR.glob("*.md"))
+        for md_file in md_files:
+            try:
+                documents.extend(self._load_file(md_file))
+            except Exception as exc:
+                logger.warning(f"Failed to parse {md_file.name}: {exc}")
 
-    if not markdown_files:
-        logger.warning("No markdown files found in knowledge base directory")
+        logger.info(f"Loaded {len(documents)} Q&A entries from {len(md_files)} file(s)")
         return documents
 
-    for file_path in markdown_files:
-        try:
-            with open(file_path, "r", encoding="utf-8") as file:
-                content = file.read()
-                document = Document(
-                    title=file_path.stem,
-                    filename=file_path.name,
-                    content=content,
+    def _load_file(self, path: Path) -> List[Document]:
+        text = path.read_text(encoding="utf-8")
+
+        category_match = CATEGORY_PATTERN.search(text)
+        category = category_match.group(1).strip() if category_match else path.stem.title()
+
+        entries: List[Document] = []
+        for match in QA_PATTERN.finditer(text):
+            question = match.group(1).strip()
+            answer = match.group(2).strip()
+            if question and answer:
+                entries.append(
+                    Document(
+                        category=category,
+                        question=question,
+                        answer=answer,
+                        source_file=path.name,
+                    )
                 )
-                documents.append(document)
-                logger.debug(
-                    f"Loaded document: {document.filename} ({len(content)} chars)"
-                )
-        except UnicodeDecodeError as e:
-            logger.error(f"Error reading file {file_path}: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error loading {file_path}: {e}")
-
-    logger.info(f"Successfully loaded {len(documents)} document(s)")
-    return documents
-
-
-if __name__ == "__main__":
-    # Configure basic logging for standalone execution
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-
-    docs = load_documents()
-    print(f"\nLoaded {len(docs)} document(s).\n")
-    for doc in docs:
-        print(f"• {doc.filename}")
+        return entries
