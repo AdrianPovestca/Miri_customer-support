@@ -4,16 +4,16 @@ responder.py
 Turns retriever results into the final reply shown to the customer.
 
 Phase 2 addition: if an OPENAI_API_KEY is configured and USE_AI_GENERATION
-is on, this asks the LLM to write a natural answer grounded in the
-retrieved knowledge base entries. If it's disabled, unconfigured, or the
-API call fails for any reason, it transparently falls back to the original
-Phase 1 template-based formatting so the bot never breaks.
+is on, this asks the LLM (via Groq's free, OpenAI-compatible API) to write
+a natural answer grounded in the retrieved knowledge base entries. If it's
+disabled, unconfigured, or the API call fails for any reason, it transparently
+falls back to the original Phase 1 template-based formatting.
 """
 
 import logging
 from typing import List, Dict, Optional
 
-from config import OPENAI_API_KEY, USE_AI_GENERATION, DEFAULT_MODEL, TEMPERATURE, MAX_TOKENS
+from config import OPENAI_API_KEY, OPENAI_BASE_URL, USE_AI_GENERATION, DEFAULT_MODEL, TEMPERATURE, MAX_TOKENS
 from prompts import SYSTEM_PROMPT, build_user_prompt, build_no_match_prompt
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ _client = None
 if USE_AI_GENERATION and OPENAI_API_KEY:
     try:
         from openai import OpenAI
-        _client = OpenAI(api_key=OPENAI_API_KEY)
+        _client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
     except ImportError:
         logger.warning(
             "USE_AI_GENERATION is on but the 'openai' package isn't installed. "
@@ -46,7 +46,7 @@ def generate_response(search_results: List[Dict], query: Optional[str] = None) -
         try:
             return _generate_ai_response(query, search_results)
         except Exception as exc:
-            logger.error(f"OpenAI generation failed, falling back to template: {exc}")
+            logger.error(f"OpenAI/Groq generation failed, falling back to template: {exc}")
 
     return _template_response(search_results)
 

@@ -16,7 +16,7 @@ from collections import Counter
 import math
 
 from config import TOP_K_RESULTS, MIN_SCORE_THRESHOLD, STOP_WORDS
-from document import Document
+from models import Document
 from document_loader import load_documents
 
 logger = logging.getLogger(__name__)
