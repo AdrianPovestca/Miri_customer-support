@@ -1,13 +1,20 @@
 """
 prompts.py
 ----------
-Prompt templates used to turn retrieved knowledge base entries into a
-natural, grounded answer via the OpenAI API.
+User-facing messages, and prompt templates used to turn retrieved knowledge
+base entries into a natural, grounded answer via the OpenAI API.
 """
 
-from typing import List
-from models import Document
+# --------------------------------------------------
+# User-facing messages (used by chatbot.py)
+# --------------------------------------------------
+WELCOME_MESSAGE = "Hello! 👋\n\nHow can I help you today?"
 
+GOODBYE_MESSAGE = "Thanks for reaching out! Have a great day. 👋"
+
+# --------------------------------------------------
+# AI generation prompts (Phase 2: LLM Integration)
+# --------------------------------------------------
 SYSTEM_PROMPT = """You are a helpful, friendly customer support assistant for an online shoe store.
 
 Rules you must always follow:
@@ -20,24 +27,24 @@ Rules you must always follow:
 """
 
 
-def build_context_block(documents: List[Document]) -> str:
-    """Turn retrieved Document objects into a numbered context block for the prompt."""
-    if not documents:
+def build_context_block(search_results: list) -> str:
+    """
+    Turn retriever results (list of {"document": Document, "score": float})
+    into a numbered context block for the prompt.
+    """
+    if not search_results:
         return "(no relevant knowledge base entries were found)"
 
     blocks = []
-    for i, doc in enumerate(documents, start=1):
-        blocks.append(
-            f"[{i}] Category: {doc.category}\n"
-            f"Q: {doc.question}\n"
-            f"A: {doc.answer}"
-        )
+    for i, result in enumerate(search_results, start=1):
+        doc = result["document"]
+        blocks.append(f"[{i}] Source: {doc.filename}\n{doc.content}")
     return "\n\n".join(blocks)
 
 
-def build_user_prompt(query: str, documents: List[Document]) -> str:
+def build_user_prompt(query: str, search_results: list) -> str:
     """Build the final user-turn prompt sent to the model."""
-    context = build_context_block(documents)
+    context = build_context_block(search_results)
     return (
         f"Knowledge base context:\n{context}\n\n"
         f"Customer question: {query}\n\n"
