@@ -1,0 +1,12 @@
+# Don't copy these into the Docker image
+.env
+.git
+.gitignore
+chroma_db/
+logs/
+venv/
+__pycache__/
+*.pyc
+tests/
+.pytest_cache/
+README.md

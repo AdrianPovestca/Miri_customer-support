@@ -15,6 +15,7 @@ of only in the terminal.
 """
 
 import logging
+import time
 from typing import Dict, List
 
 from fastapi import FastAPI, HTTPException
@@ -22,10 +23,23 @@ from pydantic import BaseModel
 
 from document_loader import load_documents
 from retriever import search
-from responder import generate_response
+from responder import generate_response_with_meta
 from config import USE_VECTOR_SEARCH
+from analytics import analytics
 
 logger = logging.getLogger(__name__)
+
+# --------------------------------------------------
+# Performance: simple response cache (Phase 4)
+# --------------------------------------------------
+# Caches answers for the FIRST question of a fresh conversation (no history
+# yet), since those are the most likely to repeat across different users
+# (e.g. many people asking "What is your return policy?"). Once a
+# conversation has history, we don't cache — the answer may legitimately
+# depend on what was said before, and caching it could return a stale or
+# wrong answer.
+_response_cache: Dict[str, str] = {}
+MAX_CACHE_SIZE = 500
 
 # --------------------------------------------------
 # Semantic search with automatic TF-IDF fallback
@@ -93,6 +107,16 @@ class HealthResponse(BaseModel):
     vector_search_enabled: bool
 
 
+class StatsResponse(BaseModel):
+    total_requests: int
+    avg_response_time_ms: float
+    ai_generation_used: int
+    template_fallback_used: int
+    ai_generation_rate_pct: float
+    no_relevant_results_rate_pct: float
+    recent_queries: List[Dict]
+
+
 # --------------------------------------------------
 # App setup
 # --------------------------------------------------
@@ -123,6 +147,12 @@ def health():
     )
 
 
+@app.get("/stats", response_model=StatsResponse)
+def stats():
+    """Basic usage monitoring: request volume, response times, AI usage rate."""
+    return analytics.summary()
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
     """
@@ -132,11 +162,27 @@ def chat(request: ChatRequest):
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="message cannot be empty")
 
+    start_time = time.perf_counter()
     history = _sessions.get(request.session_id, [])
 
-    search_query = build_search_query(request.message, history)
-    search_results = run_search(search_query)
-    response_text = generate_response(search_results, request.message, history)
+    # Performance optimization: reuse a cached answer for repeated first
+    # questions (no conversation history yet) instead of re-running search
+    # + LLM generation every time.
+    cache_key = request.message.strip().lower()
+    if not history and cache_key in _response_cache:
+        response_text = _response_cache[cache_key]
+        used_ai = False  # served from cache, no fresh generation happened
+        result_count = 1
+    else:
+        search_query = build_search_query(request.message, history)
+        search_results = run_search(search_query)
+        response_text, used_ai = generate_response_with_meta(search_results, request.message, history)
+        result_count = len(search_results)
+
+        if not history:
+            if len(_response_cache) >= MAX_CACHE_SIZE:
+                _response_cache.pop(next(iter(_response_cache)))
+            _response_cache[cache_key] = response_text
 
     history.append({"role": "user", "content": request.message})
     history.append({"role": "assistant", "content": response_text})
@@ -146,6 +192,9 @@ def chat(request: ChatRequest):
         _sessions.pop(next(iter(_sessions)))
 
     _sessions[request.session_id] = history
+
+    duration_ms = (time.perf_counter() - start_time) * 1000
+    analytics.record(request.message, duration_ms, used_ai, result_count)
 
     return ChatResponse(response=response_text, session_id=request.session_id)
 

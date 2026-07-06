@@ -50,15 +50,32 @@ def generate_response(
     Returns:
         The response string to display to the customer.
     """
+    text, _used_ai = generate_response_with_meta(search_results, query, history)
+    return text
+
+
+def generate_response_with_meta(
+    search_results: List[Dict],
+    query: Optional[str] = None,
+    history: Optional[List[Dict]] = None,
+):
+    """
+    Same as generate_response(), but also reports whether AI generation was
+    actually used for this call (vs. falling back to the template). Used by
+    the API's analytics/monitoring (Phase 4) to track the real AI usage rate.
+
+    Returns:
+        (response_text: str, used_ai_generation: bool)
+    """
     history = history or []
 
     if _client is not None and query:
         try:
-            return _generate_ai_response(query, search_results, history)
+            return _generate_ai_response(query, search_results, history), True
         except Exception as exc:
             logger.error(f"OpenAI/Groq generation failed, falling back to template: {exc}")
 
-    return _template_response(search_results)
+    return _template_response(search_results), False
 
 
 # ------------------------------------------------------------------
