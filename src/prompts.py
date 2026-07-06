@@ -60,3 +60,32 @@ def build_no_match_prompt(query: str) -> str:
         "Politely tell the customer you don't have that information on hand and "
         "suggest they reach out to human support for a definitive answer."
     )
+
+
+def build_messages(query: str, search_results: list, history: list) -> list:
+    """
+    Build the full message list sent to the LLM, including prior conversation
+    turns so the model can understand follow-up questions and references.
+
+    Args:
+        query: The current user question.
+        search_results: Retriever results for the CURRENT question only.
+        history: List of {"role": "user"/"assistant", "content": str} dicts
+                 from earlier turns in this conversation (oldest first).
+
+    Returns:
+        A list of message dicts ready to pass to the chat completion API.
+    """
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    # Include prior turns as-is, so the model has conversational context.
+    messages.extend(history)
+
+    # The current turn always includes the freshly retrieved knowledge base context.
+    if search_results:
+        current_prompt = build_user_prompt(query, search_results)
+    else:
+        current_prompt = build_no_match_prompt(query)
+
+    messages.append({"role": "user", "content": current_prompt})
+    return messages

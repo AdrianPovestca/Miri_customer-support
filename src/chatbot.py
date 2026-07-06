@@ -15,6 +15,10 @@ from logger import app_logger
 
 logger = logging.getLogger(__name__)
 
+# How many prior conversation turns (user+assistant pairs) to keep sending
+# to the LLM for context. None/0 = unlimited (keeps the whole conversation).
+MAX_HISTORY_TURNS = None
+
 
 def display_banner() -> None:
     """Display the application banner."""
@@ -46,11 +50,21 @@ def display_welcome_message() -> None:
     print("-" * 60 + "\n")
 
 
+def trim_history(history: list) -> list:
+    """Keep only the last MAX_HISTORY_TURNS turns (each turn = 2 messages)."""
+    if not MAX_HISTORY_TURNS:
+        return history
+    max_messages = MAX_HISTORY_TURNS * 2
+    return history[-max_messages:]
+
+
 def run_chatbot() -> None:
     """
     Run the interactive chatbot loop.
 
     Handles user queries, performs searches, and returns formatted responses.
+    Keeps track of conversation history so follow-up questions and references
+    to earlier turns are understood by the AI-generated responses.
     """
     logger.info("Starting AI Customer Support Chatbot")
     display_banner()
@@ -68,6 +82,9 @@ def run_chatbot() -> None:
     display_loaded_documents(len(documents), document_names)
     display_welcome_message()
 
+    # Conversation history: list of {"role": "user"/"assistant", "content": str}
+    conversation_history = []
+
     # Main interaction loop
     try:
         while True:
@@ -81,6 +98,13 @@ def run_chatbot() -> None:
                 logger.info("User ended conversation")
                 break
 
+            # Reset conversation history on demand
+            if user_input.lower() in ("reset", "clear", "new conversation"):
+                conversation_history = []
+                print("\nAssistant:")
+                print("Sure, I've cleared our conversation history. What can I help you with?\n")
+                continue
+
             # Skip empty queries
             if not user_input:
                 print("\nAssistant:")
@@ -92,12 +116,20 @@ def run_chatbot() -> None:
             # Search for relevant documents
             search_results = search(user_input)
 
-            # Generate and display response
-            response = generate_response(search_results, user_input)
+            # Generate response, taking prior conversation turns into account
+            response = generate_response(
+                search_results,
+                user_input,
+                trim_history(conversation_history),
+            )
 
             print("\nAssistant:")
             print(response)
             print()
+
+            # Store this turn in history for future context
+            conversation_history.append({"role": "user", "content": user_input})
+            conversation_history.append({"role": "assistant", "content": response})
 
     except KeyboardInterrupt:
         print("\n\nAssistant:")
