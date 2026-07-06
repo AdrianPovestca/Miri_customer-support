@@ -12,8 +12,28 @@ from retriever import search
 from responder import generate_response
 from prompts import WELCOME_MESSAGE, GOODBYE_MESSAGE
 from logger import app_logger
+from config import USE_VECTOR_SEARCH
 
 logger = logging.getLogger(__name__)
+
+# Try to enable Phase 3 semantic search; fall back to TF-IDF (Phase 1) if
+# chromadb/sentence-transformers aren't installed or anything else fails.
+_semantic_search = None
+if USE_VECTOR_SEARCH:
+    try:
+        from embeddings import semantic_search as _semantic_search
+    except Exception as exc:
+        logger.warning(f"Vector search unavailable, falling back to TF-IDF: {exc}")
+
+
+def run_search(query: str):
+    """Use semantic search if available, otherwise fall back to TF-IDF."""
+    if _semantic_search is not None:
+        try:
+            return _semantic_search(query)
+        except Exception as exc:
+            logger.error(f"Semantic search failed, falling back to TF-IDF: {exc}")
+    return search(query)
 
 # How many prior conversation turns (user+assistant pairs) to keep sending
 # to the LLM for context. None/0 = unlimited (keeps the whole conversation).
@@ -113,8 +133,8 @@ def run_chatbot() -> None:
 
             logger.info(f"Processing query: {user_input}")
 
-            # Search for relevant documents
-            search_results = search(user_input)
+            # Search for relevant documents (semantic search, with TF-IDF fallback)
+            search_results = run_search(user_input)
 
             # Generate response, taking prior conversation turns into account
             response = generate_response(
