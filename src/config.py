@@ -7,6 +7,12 @@ Central configuration settings for the AI Customer Support Playbook.
 import os
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # --------------------------------------------------
 # Project Info
 # --------------------------------------------------

@@ -35,6 +35,25 @@ def run_search(query: str):
             logger.error(f"Semantic search failed, falling back to TF-IDF: {exc}")
     return search(query)
 
+
+def build_search_query(query: str, history: list) -> str:
+    """
+    Enrich the search query with the customer's previous question, so
+    retrieval understands short follow-ups like "What if it doesn't arrive?"
+    that only make sense in light of what was just discussed.
+
+    Only the retrieval step uses this enriched text — the LLM still sees
+    the original, unmodified customer question in the prompt.
+    """
+    if not history:
+        return query
+
+    previous_user_messages = [turn["content"] for turn in history if turn["role"] == "user"]
+    if not previous_user_messages:
+        return query
+
+    return f"{previous_user_messages[-1]} {query}"
+
 # How many prior conversation turns (user+assistant pairs) to keep sending
 # to the LLM for context. None/0 = unlimited (keeps the whole conversation).
 MAX_HISTORY_TURNS = None
@@ -133,14 +152,18 @@ def run_chatbot() -> None:
 
             logger.info(f"Processing query: {user_input}")
 
-            # Search for relevant documents (semantic search, with TF-IDF fallback)
-            search_results = run_search(user_input)
+            # Search for relevant documents (semantic search, with TF-IDF fallback).
+            # The search query is enriched with the previous question for context,
+            # but the LLM still sees the original user_input as the customer's question.
+            trimmed_history = trim_history(conversation_history)
+            search_query = build_search_query(user_input, trimmed_history)
+            search_results = run_search(search_query)
 
             # Generate response, taking prior conversation turns into account
             response = generate_response(
                 search_results,
                 user_input,
-                trim_history(conversation_history),
+                trimmed_history,
             )
 
             print("\nAssistant:")
