@@ -4,27 +4,31 @@
 ![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![Status](https://img.shields.io/badge/status-in%20development-orange)
 
-A practical open-source guide for building AI-powered customer support systems using Retrieval-Augmented Generation (RAG), semantic search, and modern support workflows.
+A practical open-source guide for building AI-powered customer support systems using Retrieval-Augmented Generation (RAG), semantic vector search, and modern LLM workflows.
 
-This project demonstrates how to design and implement an intelligent customer support chatbot that retrieves relevant information from a knowledge base and uses an LLM to generate accurate, natural-sounding responses to customer queries.
+This project demonstrates how to design and implement an intelligent customer support chatbot that retrieves relevant information from a knowledge base using semantic search, remembers the ongoing conversation, and uses an LLM to generate accurate, natural-sounding responses.
 
 ## 🎯 Project Goals
 
 This educational project demonstrates:
 
 - 📚 **Knowledge Base Design** - Structure customer support documentation for optimal retrieval
-- 🔍 **Semantic Search** - Move beyond keyword matching with TF-IDF ranking
+- 🔍 **Semantic Search** - Vector embeddings (ChromaDB + Sentence Transformers), with TF-IDF as a fallback
 - 🎯 **RAG Architecture** - Retrieve relevant documents and generate context-aware responses
-- 📝 **Prompt Engineering** - Craft effective prompts for customer support scenarios
+- 💬 **Conversation Memory** - Multi-turn context so follow-up questions are understood
+- 📝 **Prompt Engineering** - Craft effective, grounded prompts for customer support scenarios
 - ✅ **Best Practices** - Python development standards, testing, logging, and documentation
 - 🚀 **LLM Integration** - Real AI-generated responses grounded in retrieved knowledge
 
 ## ✨ Features
 
 - ✅ **Realistic Knowledge Base** - 11 markdown files covering account, orders, shipping, returns, refunds, payments, products, technical support, password reset, refund policy, and FAQ for an online shoe store
-- ✅ **TF-IDF Retriever** - Text normalization, stop word removal, partial matching, relevance scoring
+- ✅ **Semantic Vector Search** - ChromaDB + Sentence Transformers understand meaning, not just keywords (e.g. "Is PayPal an option?" correctly matches "What payment methods do you accept?")
+- ✅ **TF-IDF Retriever** - Original keyword-based retriever, kept as an automatic fallback
+- ✅ **Embedding Caching** - The vector index is built once and persisted to disk, not recomputed on every run
 - ✅ **AI-Generated Responses** - Answers are written by an LLM, grounded strictly in the retrieved knowledge base content (not hallucinated)
-- ✅ **Graceful Fallback** - If the LLM is unavailable, disabled, or the API call fails, the bot automatically falls back to template-based responses so it never breaks
+- ✅ **Multi-Turn Conversation Memory** - The bot understands follow-up questions and references to earlier parts of the conversation (type `reset` anytime to start fresh)
+- ✅ **Graceful Fallback, Everywhere** - If vector search, or the LLM, is unavailable or fails, the bot automatically falls back to a simpler method so it never breaks
 - ✅ **Comprehensive Testing** - pytest suite covering core modules
 - ✅ **Professional Logging** - Structured logging for debugging and monitoring
 - ✅ **Command-Line Interface** - Interactive chatbot for testing and demonstration
@@ -50,14 +54,16 @@ ai-customer-support-playbook/
 │   ├── password-reset.md
 │   └── faq.md
 ├── src/                           # Source code
-│   ├── chatbot.py                 # Main CLI application entry point
+│   ├── chatbot.py                 # Main CLI application entry point, conversation history
 │   ├── config.py                  # Configuration and environment settings
 │   ├── logger.py                  # Structured logging setup
 │   ├── models.py                  # Document data model
 │   ├── document_loader.py         # Load documents from knowledge base
-│   ├── retriever.py               # TF-IDF search and ranking
+│   ├── retriever.py               # TF-IDF search and ranking (fallback)
+│   ├── embeddings.py              # ChromaDB + Sentence Transformers semantic search
 │   ├── responder.py               # AI-generated + template-based responses
 │   └── prompts.py                 # Prompt templates and user-facing messages
+├── chroma_db/                      # Persisted vector index (auto-generated, gitignored)
 ├── tests/                         # Pytest test suite
 ├── requirements.txt               # Python dependencies
 ├── .env.example                   # Environment variables template
@@ -71,7 +77,8 @@ ai-customer-support-playbook/
 | Component | Technology | Purpose |
 |---|---|---|
 | Language | Python 3.8+ | Core implementation language |
-| Search | TF-IDF + Text Processing | Relevance ranking and retrieval |
+| Semantic Search | ChromaDB + Sentence Transformers | Meaning-based retrieval, not just keywords |
+| Keyword Search | TF-IDF + Text Processing | Fallback relevance ranking |
 | LLM | Groq API (OpenAI-compatible) | Free-tier AI-generated responses |
 | Testing | pytest | Unit and integration tests |
 | Logging | Python logging | Structured logging and debugging |
@@ -101,15 +108,18 @@ cp .env.example .env
 # Edit .env and add your OPENAI_API_KEY (a free Groq key works great)
 ```
 
+> **Note:** `sentence-transformers` and `chromadb` are sizeable dependencies — installation may take a few minutes, and the first run will download an embedding model (~90MB) automatically.
+
 ### Configure your `.env`
 
 ```
 OPENAI_API_KEY=your-key-here
 OPENAI_BASE_URL=https://api.groq.com/openai/v1
 USE_AI_GENERATION=true
+USE_VECTOR_SEARCH=true
 ```
 
-Leave `OPENAI_API_KEY` empty (or set `USE_AI_GENERATION=false`) to run the bot with template-only responses, no LLM required.
+Leave `OPENAI_API_KEY` empty (or set `USE_AI_GENERATION=false`) to run the bot with template-only responses, no LLM required. Set `USE_VECTOR_SEARCH=false` to use the original TF-IDF retriever instead.
 
 ## 🚀 Usage
 
@@ -134,19 +144,21 @@ Hello! 👋
 
 How can I help you today?
 ------------------------------------------------------------
-You: How do I reset my password?
+You: Is PayPal an option for payment?
 
 Assistant:
-To reset your password, follow these steps:
-1. Navigate to the login page.
-2. Select Forgot Password.
-...
+Yes, we accept PayPal as a payment method, alongside major credit cards,
+Apple Pay, and Google Pay.
+
+You: What if they charge me twice?
 ```
+
+The bot understands "they" refers to PayPal/payments from the previous turn, thanks to conversation memory. Type `reset` at any time to clear the conversation and start fresh.
 
 ### Example Queries
 
 **Account & Login**
-- "How do I reset my password?"
+- "I forgot my login password" *(semantic match, no exact keywords needed)*
 - "Can I change my email address?"
 
 **Orders & Shipping**
@@ -154,11 +166,11 @@ To reset your password, follow these steps:
 - "How long does shipping take?"
 
 **Returns & Refunds**
-- "What is your return policy?"
+- "What happens if my shoes arrive damaged?" *(matches "defective shoe" content semantically)*
 - "Can I return items after 30 days?"
 
 **Payments**
-- "Do you accept PayPal?"
+- "Do you take PayPal?"
 - "What payment methods do you accept?"
 
 ## 📊 How It Works
@@ -166,11 +178,11 @@ To reset your password, follow these steps:
 ```
 User Query
     ↓
-[Text Normalization] → lowercase, remove punctuation, remove stop words
+[Semantic Search] → ChromaDB + Sentence Transformers rank chunks by meaning
+    ↓            ↓ (if unavailable or it fails)
+    ↓     [TF-IDF Fallback] → keyword-based scoring and threshold filter
     ↓
-[TF-IDF Retriever] → score and rank all knowledge base documents
-    ↓
-[Threshold Filter] → keep only results above MIN_SCORE_THRESHOLD
+[Conversation History] → prior turns are included for context
     ↓
 [LLM Generation] → Groq writes a natural answer grounded in the top matches
     ↓                       ↓ (if this fails or is disabled)
@@ -179,7 +191,7 @@ User Query
 Display Response
 ```
 
-The system prompt instructs the LLM to answer **only** from the retrieved context and to say so honestly when it doesn't have the information, rather than inventing policies or prices.
+The system prompt instructs the LLM to answer **only** from the retrieved context and to say so honestly when it doesn't have the information, rather than inventing policies or prices. Every layer degrades gracefully — the bot never breaks, it just gets simpler.
 
 ## 🧪 Testing
 
@@ -197,18 +209,18 @@ pytest tests/ --cov=src --cov-report=term-missing
 - [x] Comprehensive tests
 - [x] Logging system
 
-### Phase 2: LLM Integration ✅ (mostly complete)
+### Phase 2: LLM Integration ✅
 - [x] OpenAI-compatible API integration (via Groq, free tier)
 - [x] Prompt engineering framework (`prompts.py`, grounded system prompt)
 - [x] Response generation with automatic template fallback
-- [ ] LangChain integration (not used — direct API calls kept it simpler)
-- [ ] Context management (multi-turn conversation memory)
+- [x] Context management (multi-turn conversation memory)
+- [ ] LangChain integration (not used — direct API calls kept it simpler and easier to explain)
 
-### Phase 3: Vector Search
-- [ ] ChromaDB integration
-- [ ] Sentence Transformers embeddings
-- [ ] Semantic similarity scoring
-- [ ] Embedding caching
+### Phase 3: Vector Search ✅
+- [x] ChromaDB integration
+- [x] Sentence Transformers embeddings
+- [x] Semantic similarity scoring
+- [x] Embedding caching (persisted index, built once)
 
 ### Phase 4: Production
 - [ ] FastAPI REST API
@@ -218,18 +230,19 @@ pytest tests/ --cov=src --cov-report=term-missing
 
 ### Phase 5: Advanced Features
 - [ ] Multi-language support
-- [ ] Conversation history
 - [ ] User feedback loop
 - [ ] Analytics dashboard
+- [ ] Admin interface
 
 ## 💡 Key Learnings
 
 This project teaches:
-- **Information Retrieval** - TF-IDF, text normalization, ranking algorithms
+- **Information Retrieval** - TF-IDF vs. semantic vector search, when each one wins
 - **RAG Patterns** - Document retrieval, context augmentation, grounded response generation
 - **LLM Integration** - Calling an OpenAI-compatible API, prompt design, graceful degradation
+- **Conversation Design** - Multi-turn memory, follow-up question handling
 - **Python Best Practices** - Type hints, docstrings, error handling, logging
-- **Debugging** - Diagnosing import errors, environment variable loading, relevance thresholds
+- **Debugging** - Diagnosing import errors, environment variable loading, relevance thresholds, git merge conflicts
 
 ## 📝 License
 
@@ -237,6 +250,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Last Updated:** July 5, 2026
-**Current Version:** 0.2.0
+**Last Updated:** July 6, 2026
+**Current Version:** 0.3.0
 **Maintenance Status:** Active Development
