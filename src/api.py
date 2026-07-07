@@ -16,7 +16,7 @@ of only in the terminal.
 
 import logging
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -26,6 +26,7 @@ from retriever import search
 from responder import generate_response_with_meta
 from config import USE_VECTOR_SEARCH
 from analytics import analytics
+from feedback import feedback_store
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,13 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     session_id: str
+    response_id: str  # use this to submit feedback via POST /feedback
+
+
+class FeedbackRequest(BaseModel):
+    response_id: str
+    rating: str  # "positive" or "negative"
+    comment: Optional[str] = None
 
 
 class HealthResponse(BaseModel):
@@ -115,6 +123,7 @@ class StatsResponse(BaseModel):
     ai_generation_rate_pct: float
     no_relevant_results_rate_pct: float
     recent_queries: List[Dict]
+    feedback: Dict
 
 
 # --------------------------------------------------
@@ -149,8 +158,10 @@ def health():
 
 @app.get("/stats", response_model=StatsResponse)
 def stats():
-    """Basic usage monitoring: request volume, response times, AI usage rate."""
-    return analytics.summary()
+    """Basic usage monitoring: request volume, response times, AI usage rate, and user feedback."""
+    summary = analytics.summary()
+    summary["feedback"] = feedback_store.summary()
+    return summary
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -158,6 +169,9 @@ def chat(request: ChatRequest):
     """
     Send a customer question, get back an AI-generated (or template) answer.
     Conversation history is tracked per session_id automatically.
+
+    The response includes a response_id — submit it to POST /feedback to
+    tell us whether that particular answer was helpful.
     """
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="message cannot be empty")
@@ -196,7 +210,25 @@ def chat(request: ChatRequest):
     duration_ms = (time.perf_counter() - start_time) * 1000
     analytics.record(request.message, duration_ms, used_ai, result_count)
 
-    return ChatResponse(response=response_text, session_id=request.session_id)
+    response_id = feedback_store.register_response(request.message, response_text)
+
+    return ChatResponse(response=response_text, session_id=request.session_id, response_id=response_id)
+
+
+@app.post("/feedback")
+def submit_feedback(request: FeedbackRequest):
+    """
+    Rate a previous response as helpful or not. Use the response_id
+    returned by POST /chat.
+    """
+    if request.rating not in ("positive", "negative"):
+        raise HTTPException(status_code=400, detail='rating must be "positive" or "negative"')
+
+    success = feedback_store.record_feedback(request.response_id, request.rating, request.comment)
+    if not success:
+        raise HTTPException(status_code=404, detail="response_id not found (it may have expired)")
+
+    return {"status": "recorded"}
 
 
 @app.delete("/chat/{session_id}")

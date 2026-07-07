@@ -13,6 +13,7 @@ from responder import generate_response
 from prompts import WELCOME_MESSAGE, GOODBYE_MESSAGE
 from logger import app_logger
 from config import USE_VECTOR_SEARCH
+from feedback import feedback_store
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,16 @@ def run_chatbot() -> None:
             conversation_history.append({"role": "user", "content": user_input})
             conversation_history.append({"role": "assistant", "content": response})
 
+            # Quick feedback loop: ask if the response was helpful
+            response_id = feedback_store.register_response(user_input, response)
+            feedback_input = input("Was this helpful? (y/n, Enter to skip): ").strip().lower()
+            if feedback_input == "y":
+                feedback_store.record_feedback(response_id, "positive")
+            elif feedback_input == "n":
+                comment = input("Sorry about that — what went wrong? (optional, Enter to skip): ").strip()
+                feedback_store.record_feedback(response_id, "negative", comment or None)
+            print()
+
     except KeyboardInterrupt:
         print("\n\nAssistant:")
         print(GOODBYE_MESSAGE)
@@ -182,6 +193,13 @@ def run_chatbot() -> None:
         logger.error(f"Unexpected error in chatbot: {e}", exc_info=True)
         print("\n❌ An unexpected error occurred. Please try again.")
         raise
+    finally:
+        summary = feedback_store.summary()
+        if summary["total_feedback"] > 0:
+            print("-" * 60)
+            print(f"Session feedback: {summary['positive']} 👍  {summary['negative']} 👎  "
+                  f"({summary['satisfaction_rate_pct']}% satisfaction)")
+            print("-" * 60)
 
 
 if __name__ == "__main__":
