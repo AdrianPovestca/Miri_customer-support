@@ -29,6 +29,9 @@ This educational project demonstrates:
 - ✅ **AI-Generated Responses** - Answers are written by an LLM, grounded strictly in the retrieved knowledge base content (not hallucinated)
 - ✅ **Multi-Turn Conversation Memory** - The bot understands follow-up questions and references to earlier parts of the conversation (type `reset` anytime to start fresh)
 - ✅ **Graceful Fallback, Everywhere** - If vector search, or the LLM, is unavailable or fails, the bot automatically falls back to a simpler method so it never breaks
+- ✅ **REST API** - FastAPI-based `/chat` endpoint with per-session conversation memory, ready to be called from a website, app, or any other client
+- ✅ **Dockerized** - Runs the same way anywhere with `docker compose up --build`
+- ✅ **Built-in Monitoring** - `/stats` endpoint tracks request volume, response times, and AI-generation vs. fallback rate
 - ✅ **Comprehensive Testing** - pytest suite covering core modules
 - ✅ **Professional Logging** - Structured logging for debugging and monitoring
 - ✅ **Command-Line Interface** - Interactive chatbot for testing and demonstration
@@ -54,7 +57,9 @@ ai-customer-support-playbook/
 │   ├── password-reset.md
 │   └── faq.md
 ├── src/                           # Source code
-│   ├── chatbot.py                 # Main CLI application entry point, conversation history
+│   ├── chatbot.py                 # CLI entry point, conversation history
+│   ├── api.py                     # FastAPI REST API (Phase 4)
+│   ├── analytics.py               # Lightweight request monitoring (Phase 4)
 │   ├── config.py                  # Configuration and environment settings
 │   ├── logger.py                  # Structured logging setup
 │   ├── models.py                  # Document data model
@@ -65,6 +70,9 @@ ai-customer-support-playbook/
 │   └── prompts.py                 # Prompt templates and user-facing messages
 ├── chroma_db/                      # Persisted vector index (auto-generated, gitignored)
 ├── tests/                         # Pytest test suite
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
 ├── requirements.txt               # Python dependencies
 ├── .env.example                   # Environment variables template
 ├── .gitignore
@@ -120,6 +128,27 @@ USE_VECTOR_SEARCH=true
 ```
 
 Leave `OPENAI_API_KEY` empty (or set `USE_AI_GENERATION=false`) to run the bot with template-only responses, no LLM required. Set `USE_VECTOR_SEARCH=false` to use the original TF-IDF retriever instead.
+
+## 🐳 Running with Docker
+
+```bash
+docker compose up --build
+```
+
+This builds and runs the API in a container, using your local `.env` for secrets and persisting the vector index in `chroma_db/` so it survives restarts. The API is then reachable the same way as running it directly:
+
+```bash
+curl http://localhost:8000/health
+curl -X POST http://localhost:8000/chat -H "Content-Type: application/json" -d '{"message": "How do I reset my password?", "session_id": "demo"}'
+```
+
+## 📈 Monitoring
+
+```bash
+curl http://localhost:8000/stats
+```
+
+Returns request volume, average response time, and the AI-generation vs. template-fallback rate — useful for spotting issues like a misconfigured API key (which silently falls back to templates) or a cold-start delay on the very first request after the server starts.
 
 ## 🚀 Usage
 
@@ -222,11 +251,11 @@ pytest tests/ --cov=src --cov-report=term-missing
 - [x] Semantic similarity scoring
 - [x] Embedding caching (persisted index, built once)
 
-### Phase 4: Production
-- [ ] FastAPI REST API
-- [ ] Docker containerization
-- [ ] Performance optimization
-- [ ] Monitoring and analytics
+### Phase 4: Production ✅
+- [x] FastAPI REST API (`/chat`, `/health`, `/stats`, session-based conversation memory)
+- [x] Docker containerization (CPU-only PyTorch to keep the image lean)
+- [x] Performance optimization (response caching for repeated first questions, persisted embedding index)
+- [x] Monitoring and analytics (`/stats` endpoint: request volume, response times, AI vs. fallback rate)
 
 ### Phase 5: Advanced Features
 - [ ] Multi-language support
@@ -251,5 +280,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 **Last Updated:** July 6, 2026
-**Current Version:** 0.3.0
+**Current Version:** 0.4.0
 **Maintenance Status:** Active Development
