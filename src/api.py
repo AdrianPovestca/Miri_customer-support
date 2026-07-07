@@ -16,9 +16,11 @@ of only in the terminal.
 
 import logging
 import time
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from document_loader import load_documents
@@ -154,6 +156,13 @@ def health():
         documents_loaded=_document_count,
         vector_search_enabled=_semantic_search is not None,
     )
+
+
+@app.get("/dashboard")
+def dashboard():
+    """Visual analytics dashboard (auto-refreshing) — reads live data from /stats."""
+    dashboard_path = Path(__file__).parent / "static" / "dashboard.html"
+    return FileResponse(dashboard_path, media_type="text/html")
 
 
 @app.get("/stats", response_model=StatsResponse)

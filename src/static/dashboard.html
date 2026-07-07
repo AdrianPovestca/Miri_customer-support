@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Customer Support Playbook — Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root {
+    --bg: #0d0e12;
+    --card: #16181d;
+    --border: #24262c;
+    --text: #e8e9ec;
+    --muted: #8b8d97;
+    --accent: #6ee7b7;
+    --accent-dim: #2f4f42;
+    --negative: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    padding: 40px 24px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 32px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .card .label {
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .card .value.accent { color: var(--accent); }
+  .card .value.negative { color: var(--negative); }
+  .section-title {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 32px 0 12px 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--muted); font-weight: 500; }
+  tr:last-child td { border-bottom: none; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge.ai { background: var(--accent-dim); color: var(--accent); }
+  .badge.fallback { background: #2a2a2a; color: var(--muted); }
+  .empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 20px;
+    text-align: center;
+  }
+  .refresh-note {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 24px;
+    text-align: center;
+  }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .bar-label { width: 90px; font-size: 12px; color: var(--muted); flex-shrink: 0; }
+  .bar-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.4s ease; }
+  .bar-fill.negative { background: var(--negative); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🤖 AI Customer Support Playbook</h1>
+  <div class="subtitle">Live monitoring dashboard — auto-refreshes every 5s</div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Total Requests</div>
+      <div class="value" id="total-requests">–</div>
+    </div>
+    <div class="card">
+      <div class="label">Avg Response Time</div>
+      <div class="value" id="avg-time">–</div>
+    </div>
+    <div class="card">
+      <div class="label">AI Generation Rate</div>
+      <div class="value accent" id="ai-rate">–</div>
+    </div>
+    <div class="card">
+      <div class="label">No Match Rate</div>
+      <div class="value" id="no-results-rate">–</div>
+    </div>
+  </div>
+
+  <div class="section-title">User Feedback</div>
+  <div class="grid">
+    <div class="card">
+      <div class="label">Satisfaction Rate</div>
+      <div class="value accent" id="satisfaction-rate">–</div>
+    </div>
+    <div class="card">
+      <div class="label">👍 Positive</div>
+      <div class="value" id="feedback-positive">–</div>
+    </div>
+    <div class="card">
+      <div class="label">👎 Negative</div>
+      <div class="value negative" id="feedback-negative">–</div>
+    </div>
+  </div>
+
+  <div id="bar-section">
+    <div class="bar-row">
+      <div class="bar-label">AI vs Template</div>
+      <div class="bar-track"><div class="bar-fill" id="ai-bar" style="width:0%"></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Satisfaction</div>
+      <div class="bar-track"><div class="bar-fill" id="satisfaction-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="section-title">Recent Queries</div>
+  <table>
+    <thead>
+      <tr><th>Query</th><th>Duration</th><th>Source</th></tr>
+    </thead>
+    <tbody id="recent-queries-body">
+      <tr><td colspan="3" class="empty">No requests yet</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-title">Recent Negative Feedback</div>
+  <table>
+    <thead>
+      <tr><th>Query</th><th>Comment</th></tr>
+    </thead>
+    <tbody id="negative-feedback-body">
+      <tr><td colspan="2" class="empty">No negative feedback yet</td></tr>
+    </tbody>
+  </table>
+
+  <div class="refresh-note">Data resets when the API server restarts (in-memory only).</div>
+</div>
+
+<script>
+async function refresh() {
+  try {
+    const res = await fetch('/stats');
+    const data = await res.json();
+
+    document.getElementById('total-requests').textContent = data.total_requests;
+    document.getElementById('avg-time').textContent = Math.round(data.avg_response_time_ms) + ' ms';
+    document.getElementById('ai-rate').textContent = data.ai_generation_rate_pct + '%';
+    document.getElementById('no-results-rate').textContent = data.no_relevant_results_rate_pct + '%';
+
+    document.getElementById('ai-bar').style.width = data.ai_generation_rate_pct + '%';
+
+    const fb = data.feedback || {};
+    document.getElementById('satisfaction-rate').textContent = (fb.satisfaction_rate_pct ?? 0) + '%';
+    document.getElementById('feedback-positive').textContent = fb.positive ?? 0;
+    document.getElementById('feedback-negative').textContent = fb.negative ?? 0;
+    document.getElementById('satisfaction-bar').style.width = (fb.satisfaction_rate_pct ?? 0) + '%';
+
+    const recentBody = document.getElementById('recent-queries-body');
+    if (data.recent_queries && data.recent_queries.length > 0) {
+      recentBody.innerHTML = data.recent_queries.slice().reverse().map(q => `
+        <tr>
+          <td>${escapeHtml(q.query)}</td>
+          <td>${Math.round(q.duration_ms)} ms</td>
+          <td><span class="badge ${q.used_ai_generation ? 'ai' : 'fallback'}">${q.used_ai_generation ? 'AI' : 'Template'}</span></td>
+        </tr>
+      `).join('');
+    } else {
+      recentBody.innerHTML = '<tr><td colspan="3" class="empty">No requests yet</td></tr>';
+    }
+
+    const negBody = document.getElementById('negative-feedback-body');
+    if (fb.recent_negative_feedback && fb.recent_negative_feedback.length > 0) {
+      negBody.innerHTML = fb.recent_negative_feedback.map(f => `
+        <tr>
+          <td>${escapeHtml(f.query || '')}</td>
+          <td>${escapeHtml(f.comment || '—')}</td>
+        </tr>
+      `).join('');
+    } else {
+      negBody.innerHTML = '<tr><td colspan="2" class="empty">No negative feedback yet</td></tr>';
+    }
+  } catch (e) {
+    console.error('Failed to load stats', e);
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
