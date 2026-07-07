@@ -62,7 +62,7 @@ def build_no_match_prompt(query: str) -> str:
     )
 
 
-def build_messages(query: str, search_results: list, history: list) -> list:
+def build_messages(query: str, search_results: list, history: list, language_name: str = "English") -> list:
     """
     Build the full message list sent to the LLM, including prior conversation
     turns so the model can understand follow-up questions and references.
@@ -72,11 +72,24 @@ def build_messages(query: str, search_results: list, history: list) -> list:
         search_results: Retriever results for the CURRENT question only.
         history: List of {"role": "user"/"assistant", "content": str} dicts
                  from earlier turns in this conversation (oldest first).
+        language_name: Human-readable name of the language to reply in
+                       (e.g. "Romanian"), detected from the customer's message.
+                       The knowledge base itself stays in English — only the
+                       generated reply is translated.
 
     Returns:
         A list of message dicts ready to pass to the chat completion API.
     """
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system_prompt = SYSTEM_PROMPT
+    if language_name != "English":
+        system_prompt += (
+            f"\n\nIMPORTANT: The customer is writing in {language_name}. "
+            f"Reply entirely in {language_name}, even though the knowledge base "
+            f"context below is in English. Translate the relevant information "
+            f"naturally — don't just translate word-for-word."
+        )
+
+    messages = [{"role": "system", "content": system_prompt}]
 
     # Include prior turns as-is, so the model has conversational context.
     messages.extend(history)

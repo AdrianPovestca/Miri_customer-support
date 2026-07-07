@@ -16,6 +16,7 @@ from typing import List, Dict, Optional
 
 from config import OPENAI_API_KEY, OPENAI_BASE_URL, USE_AI_GENERATION, DEFAULT_MODEL, TEMPERATURE, MAX_TOKENS
 from prompts import build_messages
+from language import detect_language, language_name as get_language_name
 
 logger = logging.getLogger(__name__)
 
@@ -69,20 +70,23 @@ def generate_response_with_meta(
     """
     history = history or []
 
+    detected_lang = detect_language(query) if query else "en"
+
     if _client is not None and query:
         try:
-            return _generate_ai_response(query, search_results, history), True
+            return _generate_ai_response(query, search_results, history, detected_lang), True
         except Exception as exc:
             logger.error(f"OpenAI/Groq generation failed, falling back to template: {exc}")
 
-    return _template_response(search_results), False
+    return _template_response(search_results, detected_lang), False
 
 
 # ------------------------------------------------------------------
-# AI-powered generation (Phase 2)
+# AI-powered generation (Phase 2, multi-language in Phase 5)
 # ------------------------------------------------------------------
-def _generate_ai_response(query: str, search_results: List[Dict], history: List[Dict]) -> str:
-    messages = build_messages(query, search_results, history)
+def _generate_ai_response(query: str, search_results: List[Dict], history: List[Dict], detected_lang: str = "en") -> str:
+    lang_name = get_language_name(detected_lang)
+    messages = build_messages(query, search_results, history, lang_name)
 
     completion = _client.chat.completions.create(
         model=DEFAULT_MODEL,
@@ -91,14 +95,14 @@ def _generate_ai_response(query: str, search_results: List[Dict], history: List[
         messages=messages,
     )
     answer = completion.choices[0].message.content.strip()
-    logger.info(f"AI-generated response for query: {query[:60]!r} (history turns: {len(history)})")
+    logger.info(f"AI-generated response ({lang_name}) for query: {query[:60]!r} (history turns: {len(history)})")
     return answer
 
 
 # ------------------------------------------------------------------
 # Original template-based fallback (Phase 1 behavior, preserved)
 # ------------------------------------------------------------------
-def _template_response(search_results: List[Dict]) -> str:
+def _template_response(search_results: List[Dict], detected_lang: str = "en") -> str:
     if not search_results:
         return (
             "I couldn't find anything specific about that in our help center. "
@@ -113,5 +117,15 @@ def _template_response(search_results: List[Dict]) -> str:
         lines.append("\nYou might also find these helpful:")
         for result in search_results[1:]:
             lines.append(f"• {result['document'].title}")
+
+    # Honest limitation: the template fallback can only return English text
+    # (it's raw knowledge base content, not AI-translated). Let non-English
+    # speakers know why the reply looks like this.
+    if detected_lang != "en":
+        lang_name = get_language_name(detected_lang)
+        lines.append(
+            f"\n(Note: full support for {lang_name} requires AI generation to be "
+            f"enabled; this answer is shown in English for now.)"
+        )
 
     return "\n".join(lines)
