@@ -145,6 +145,13 @@ def dashboard():
     return FileResponse(dashboard_path, media_type="text/html")
 
 
+@app.get("/chat-ui")
+def chat_ui():
+    """Simple browser-based chat interface — talk to the bot without curl or code."""
+    chat_path = Path(__file__).parent / "static" / "chat.html"
+    return FileResponse(chat_path, media_type="text/html")
+
+
 @app.get("/stats", response_model=StatsResponse)
 def stats():
     """Basic usage monitoring: request volume, response times, AI usage rate, and user feedback."""
@@ -266,3 +273,4 @@ def admin_delete_session(session_id: str, x_admin_token: Optional[str] = Header(
     _check_admin_token(x_admin_token)
     database.clear_session(session_id)
     return {"status": "deleted", "session_id": session_id}
+
