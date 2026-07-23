@@ -1,17 +1,13 @@
 """
 api.py
 ------
-Phase 4: Production — exposes the chatbot as a REST API using FastAPI.
+Phase 4/5: Production — exposes the chatbot as a REST API using FastAPI.
 
 Run with:
     uvicorn api:app --reload --port 8000
 
-Then send requests to http://localhost:8000/chat (see README for examples).
-
-Each caller supplies a `session_id` so multiple people (or apps) can talk to
-the bot at the same time, each with their own conversation history — the
-same conversation memory built in Phase 2, just usable over HTTP now instead
-of only in the terminal.
+Conversation history is now persisted in a SQLite database (database.py),
+so it survives server restarts — previously it lived only in memory.
 """
 
 import logging
@@ -19,34 +15,22 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from document_loader import load_documents
 from retriever import search
 from responder import generate_response_with_meta
-from config import USE_VECTOR_SEARCH
+from config import USE_VECTOR_SEARCH, ADMIN_TOKEN
 from analytics import analytics
 from feedback import feedback_store
+import database
 
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------
-# Performance: simple response cache (Phase 4)
-# --------------------------------------------------
-# Caches answers for the FIRST question of a fresh conversation (no history
-# yet), since those are the most likely to repeat across different users
-# (e.g. many people asking "What is your return policy?"). Once a
-# conversation has history, we don't cache — the answer may legitimately
-# depend on what was said before, and caching it could return a stale or
-# wrong answer.
-_response_cache: Dict[str, str] = {}
-MAX_CACHE_SIZE = 500
-
-# --------------------------------------------------
 # Semantic search with automatic TF-IDF fallback
-# (same logic as chatbot.py, reused here for the API)
 # --------------------------------------------------
 _semantic_search = None
 if USE_VECTOR_SEARCH:
@@ -68,9 +52,8 @@ def run_search(query: str):
 def build_search_query(query: str, history: List[Dict]) -> str:
     """
     Enrich the search query with the customer's previous question, so
-    retrieval understands short follow-ups that only make sense in light
-    of what was just discussed. Only affects retrieval, not the prompt
-    shown to the LLM (which still sees the original question).
+    retrieval understands short follow-ups. Only affects retrieval, not
+    the prompt shown to the LLM (which still sees the original question).
     """
     if not history:
         return query
@@ -81,14 +64,10 @@ def build_search_query(query: str, history: List[Dict]) -> str:
 
 
 # --------------------------------------------------
-# In-memory conversation history, per session
+# Performance: simple response cache (Phase 4)
 # --------------------------------------------------
-# NOTE: this resets whenever the API server restarts. For a real production
-# deployment, this would be swapped for a database or Redis — that's a good
-# next step to mention in an interview, but out of scope for this playbook.
-_sessions: Dict[str, List[Dict]] = {}
-
-MAX_SESSIONS = 1000  # simple safety limit so memory usage can't grow forever
+_response_cache: Dict[str, str] = {}
+MAX_CACHE_SIZE = 500
 
 
 # --------------------------------------------------
@@ -134,7 +113,7 @@ class StatsResponse(BaseModel):
 app = FastAPI(
     title="AI Customer Support Playbook API",
     description="REST API for the RAG-based customer support chatbot.",
-    version="0.3.0",
+    version="0.5.0",
 )
 
 _document_count = 0
@@ -145,6 +124,7 @@ def on_startup():
     global _document_count
     documents = load_documents()
     _document_count = len(documents)
+    database.init_db()
     logger.info(f"API started, {_document_count} knowledge base document(s) loaded")
 
 
@@ -177,16 +157,14 @@ def stats():
 def chat(request: ChatRequest):
     """
     Send a customer question, get back an AI-generated (or template) answer.
-    Conversation history is tracked per session_id automatically.
-
-    The response includes a response_id — submit it to POST /feedback to
-    tell us whether that particular answer was helpful.
+    Conversation history is persisted per session_id in a SQLite database,
+    so it survives server restarts.
     """
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="message cannot be empty")
 
     start_time = time.perf_counter()
-    history = _sessions.get(request.session_id, [])
+    history = database.get_history(request.session_id)
 
     # Performance optimization: reuse a cached answer for repeated first
     # questions (no conversation history yet) instead of re-running search
@@ -194,7 +172,7 @@ def chat(request: ChatRequest):
     cache_key = request.message.strip().lower()
     if not history and cache_key in _response_cache:
         response_text = _response_cache[cache_key]
-        used_ai = False  # served from cache, no fresh generation happened
+        used_ai = False
         result_count = 1
     else:
         search_query = build_search_query(request.message, history)
@@ -207,14 +185,8 @@ def chat(request: ChatRequest):
                 _response_cache.pop(next(iter(_response_cache)))
             _response_cache[cache_key] = response_text
 
-    history.append({"role": "user", "content": request.message})
-    history.append({"role": "assistant", "content": response_text})
-
-    if request.session_id not in _sessions and len(_sessions) >= MAX_SESSIONS:
-        # Very simple eviction: drop an arbitrary old session rather than growing forever.
-        _sessions.pop(next(iter(_sessions)))
-
-    _sessions[request.session_id] = history
+    database.save_message(request.session_id, "user", request.message)
+    database.save_message(request.session_id, "assistant", response_text)
 
     duration_ms = (time.perf_counter() - start_time) * 1000
     analytics.record(request.message, duration_ms, used_ai, result_count)
@@ -224,12 +196,16 @@ def chat(request: ChatRequest):
     return ChatResponse(response=response_text, session_id=request.session_id, response_id=response_id)
 
 
+@app.delete("/chat/{session_id}")
+def reset_session(session_id: str):
+    """Permanently delete the conversation history for a given session."""
+    database.clear_session(session_id)
+    return {"status": "cleared", "session_id": session_id}
+
+
 @app.post("/feedback")
 def submit_feedback(request: FeedbackRequest):
-    """
-    Rate a previous response as helpful or not. Use the response_id
-    returned by POST /chat.
-    """
+    """Rate a previous response as helpful or not. Use the response_id returned by POST /chat."""
     if request.rating not in ("positive", "negative"):
         raise HTTPException(status_code=400, detail='rating must be "positive" or "negative"')
 
@@ -240,8 +216,53 @@ def submit_feedback(request: FeedbackRequest):
     return {"status": "recorded"}
 
 
-@app.delete("/chat/{session_id}")
-def reset_session(session_id: str):
-    """Clear the conversation history for a given session."""
-    _sessions.pop(session_id, None)
-    return {"status": "cleared", "session_id": session_id}
+# --------------------------------------------------
+# Admin interface (Phase 5)
+# --------------------------------------------------
+def _check_admin_token(x_admin_token: Optional[str]) -> None:
+    """
+    Very simple shared-secret protection for admin endpoints — enough for
+    a portfolio project, not a substitute for real auth in production
+    (that would mean per-user accounts, hashed credentials, and HTTPS-only
+    cookies/JWTs instead of a single static token).
+    """
+    if not ADMIN_TOKEN:
+        # No token configured: admin endpoints are open. Fine for local
+        # development, but a warning is logged so it isn't accidentally
+        # left this way in a real deployment.
+        logger.warning("ADMIN_TOKEN not set — admin endpoints are unprotected.")
+        return
+    if x_admin_token != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin token")
+
+
+@app.get("/admin")
+def admin_page():
+    """Serves the admin panel UI (session browser)."""
+    admin_path = Path(__file__).parent / "static" / "admin.html"
+    return FileResponse(admin_path, media_type="text/html")
+
+
+@app.get("/admin/sessions")
+def admin_list_sessions(x_admin_token: Optional[str] = Header(None)):
+    """List every conversation session stored in the database."""
+    _check_admin_token(x_admin_token)
+    return {"sessions": database.list_sessions()}
+
+
+@app.get("/admin/sessions/{session_id}")
+def admin_get_session(session_id: str, x_admin_token: Optional[str] = Header(None)):
+    """Full message history for one session."""
+    _check_admin_token(x_admin_token)
+    history = database.get_history(session_id)
+    if not history:
+        raise HTTPException(status_code=404, detail="Session not found or empty")
+    return {"session_id": session_id, "messages": history}
+
+
+@app.delete("/admin/sessions/{session_id}")
+def admin_delete_session(session_id: str, x_admin_token: Optional[str] = Header(None)):
+    """Permanently delete a conversation from the database."""
+    _check_admin_token(x_admin_token)
+    database.clear_session(session_id)
+    return {"status": "deleted", "session_id": session_id}

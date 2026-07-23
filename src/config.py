@@ -73,3 +73,10 @@ USE_AI_GENERATION = os.getenv("USE_AI_GENERATION", "true").lower() == "true"
 USE_VECTOR_SEARCH = os.getenv("USE_VECTOR_SEARCH", "true").lower() == "true"
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 CHROMA_PERSIST_DIR = BASE_DIR / "chroma_db"
+
+# --------------------------------------------------
+# Admin Interface (Phase 5)
+# --------------------------------------------------
+# Set a secret value here (and in .env) to protect /admin endpoints.
+# Leave empty during local development if you don't need protection.
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
