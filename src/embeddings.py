@@ -146,7 +146,28 @@ def semantic_search(query: str, top_k: int = None) -> List[Dict]:
 
     return output
 
+def rebuild_index() -> int:
+    """
+    Delete and rebuild the vector index from whatever files currently exist
+    in knowledge_base/. Call this after uploading, replacing, or deleting
+    knowledge base documents (e.g. from the admin panel), so search reflects
+    the new content immediately, without waiting for a process restart.
 
+    Returns the number of chunks indexed.
+    """
+    global _collection
+    import chromadb
+
+    client = chromadb.PersistentClient(path=str(CHROMA_PERSIST_DIR))
+    try:
+        client.delete_collection("knowledge_base")
+    except Exception:
+        pass  # collection may not exist yet on a fresh install
+
+    _collection = None  # force _get_collection() to rebuild from scratch
+    collection = _get_collection()
+    return collection.count()
+    
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
