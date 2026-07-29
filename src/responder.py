@@ -3,12 +3,13 @@ responder.py
 ------------
 Turns retriever results into the final reply shown to the customer.
 
-Phase 2 addition: if an OPENAI_API_KEY is configured and USE_AI_GENERATION
-is on, this asks the LLM (via Groq's free, OpenAI-compatible API) to write
-a natural answer grounded in the retrieved knowledge base entries, taking
-the ongoing conversation history into account. If it's disabled,
-unconfigured, or the API call fails for any reason, it transparently
-falls back to the original Phase 1 template-based formatting.
+If an OPENAI_API_KEY is configured and USE_AI_GENERATION is on, this asks
+the LLM to write a natural, grounded answer. The system prompt (see
+prompts.py) makes the model handle casual conversation and general
+knowledge naturally, while staying strict about not inventing
+company-specific facts. If AI generation is disabled, unconfigured, or the
+API call fails, it transparently falls back to the Phase 1 template
+(raw knowledge base content).
 """
 
 import logging
@@ -37,20 +38,7 @@ def generate_response(
     query: Optional[str] = None,
     history: Optional[List[Dict]] = None,
 ) -> str:
-    """
-    Generate the final response text shown to the user.
-
-    Args:
-        search_results: List of {"document": Document, "score": float} from retriever.search()
-        query: The original user question. Needed for AI generation; if omitted,
-               the function falls back to the template-based response.
-        history: List of {"role": "user"/"assistant", "content": str} dicts from
-                 earlier turns in this conversation (oldest first). Optional —
-                 omitting it just means the bot won't recall earlier turns.
-
-    Returns:
-        The response string to display to the customer.
-    """
+    """Backward-compatible wrapper — returns just the response text."""
     text, _used_ai = generate_response_with_meta(search_results, query, history)
     return text
 
@@ -61,15 +49,10 @@ def generate_response_with_meta(
     history: Optional[List[Dict]] = None,
 ):
     """
-    Same as generate_response(), but also reports whether AI generation was
-    actually used for this call (vs. falling back to the template). Used by
-    the API's analytics/monitoring (Phase 4) to track the real AI usage rate.
-
-    Returns:
-        (response_text: str, used_ai_generation: bool)
+    Returns (response_text: str, used_ai_generation: bool). Used by the
+    API's analytics/monitoring to track real AI usage rate.
     """
     history = history or []
-
     detected_lang = detect_language(query) if query else "en"
 
     if _client is not None and query:
@@ -81,9 +64,6 @@ def generate_response_with_meta(
     return _template_response(search_results, detected_lang), False
 
 
-# ------------------------------------------------------------------
-# AI-powered generation (Phase 2, multi-language in Phase 5)
-# ------------------------------------------------------------------
 def _generate_ai_response(query: str, search_results: List[Dict], history: List[Dict], detected_lang: str = "en") -> str:
     lang_name = get_language_name(detected_lang)
     messages = build_messages(query, search_results, history, lang_name)
@@ -99,10 +79,13 @@ def _generate_ai_response(query: str, search_results: List[Dict], history: List[
     return answer
 
 
-# ------------------------------------------------------------------
-# Original template-based fallback (Phase 1 behavior, preserved)
-# ------------------------------------------------------------------
 def _template_response(search_results: List[Dict], detected_lang: str = "en") -> str:
+    """
+    Phase 1 fallback: only used when AI generation is unavailable. Since
+    this just returns raw knowledge base content, it can't handle casual
+    conversation gracefully — that nuance requires the LLM. This is a known,
+    acceptable limitation of the fallback path.
+    """
     if not search_results:
         return (
             "I couldn't find anything specific about that in our help center. "
@@ -118,9 +101,6 @@ def _template_response(search_results: List[Dict], detected_lang: str = "en") ->
         for result in search_results[1:]:
             lines.append(f"• {result['document'].title}")
 
-    # Honest limitation: the template fallback can only return English text
-    # (it's raw knowledge base content, not AI-translated). Let non-English
-    # speakers know why the reply looks like this.
     if detected_lang != "en":
         lang_name = get_language_name(detected_lang)
         lines.append(

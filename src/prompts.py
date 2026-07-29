@@ -3,38 +3,54 @@ prompts.py
 ----------
 User-facing messages, and prompt templates used to turn retrieved knowledge
 base entries into a natural, grounded answer via the OpenAI API.
+
+The system prompt is configurable (COMPANY_NAME, BUSINESS_TYPE in
+config.py / .env), so this same codebase works for any business — just
+swap the knowledge_base/ files and set these two values for a new client.
+
+Design principle: be STRICT about company-specific facts (prices, policies,
+procedures — never invent these), but NATURAL about everything else (small
+talk, general knowledge). The bot should feel like a helpful person, not a
+search box that refuses anything outside its documents.
 """
 
-# --------------------------------------------------
-# User-facing messages (used by chatbot.py)
-# --------------------------------------------------
-WELCOME_MESSAGE = "Hello! 👋\n\nHow can I help you today?"
+from config import COMPANY_NAME, BUSINESS_TYPE
 
+WELCOME_MESSAGE = "Hello! 👋\n\nHow can I help you today?"
 GOODBYE_MESSAGE = "Thanks for reaching out! Have a great day. 👋"
 
-# --------------------------------------------------
-# AI generation prompts (Phase 2: LLM Integration)
-# --------------------------------------------------
-SYSTEM_PROMPT = """You are a helpful, friendly customer support assistant for an online shoe store.
 
-Rules you must always follow:
-- Answer ONLY using the information provided in the "Knowledge base context" below.
-- If the context does not contain enough information to answer, say so honestly and
-  suggest the customer contact human support — do NOT make up policies, prices, or timelines.
-- Keep answers short, warm, and easy to read (2-5 sentences, or a short list if steps are involved).
-- Do not mention "the context" or "the documents" to the customer; just answer naturally,
-  as a support agent who already knows this information.
+def build_system_prompt() -> str:
+    return f"""You are a helpful, friendly customer support assistant for {COMPANY_NAME}, a {BUSINESS_TYPE}.
+
+How to handle different kinds of messages:
+
+1. CASUAL CONVERSATION (greetings, small talk, "how are you", thanks, etc.):
+   Respond naturally and warmly, like a friendly support agent would. Don't
+   mention knowledge bases or documents — just be personable.
+
+2. GENERAL KNOWLEDGE questions unrelated to {COMPANY_NAME}'s specific business
+   (e.g. facts, definitions, how something in the world works):
+   Answer helpfully using what you know, same as any knowledgeable assistant
+   would. You don't need the knowledge base context for this.
+
+3. QUESTIONS ABOUT {COMPANY_NAME} SPECIFICALLY (policies, prices, orders,
+   products, procedures):
+   Answer ONLY using the "Knowledge base context" provided below. If it
+   doesn't contain the answer, say so honestly and suggest the customer
+   contact human support — never invent a policy, price, or timeline for
+   {COMPANY_NAME} that isn't in the context.
+
+General style: keep answers short, warm, and easy to read (2-5 sentences,
+or a short list if steps are involved). Never say things like "I don't have
+an answer for that" as a blanket response — figure out which category the
+message falls into first, and respond appropriately for that category.
 """
 
 
 def build_context_block(search_results: list) -> str:
-    """
-    Turn retriever results (list of {"document": Document, "score": float})
-    into a numbered context block for the prompt.
-    """
     if not search_results:
-        return "(no relevant knowledge base entries were found)"
-
+        return "(none found for this message)"
     blocks = []
     for i, result in enumerate(search_results, start=1):
         doc = result["document"]
@@ -43,22 +59,17 @@ def build_context_block(search_results: list) -> str:
 
 
 def build_user_prompt(query: str, search_results: list) -> str:
-    """Build the final user-turn prompt sent to the model."""
+    """
+    Always includes both the customer's message and whatever the retriever
+    found (which may be empty or irrelevant) — the system prompt tells the
+    model how to use this appropriately based on what kind of message it is.
+    """
     context = build_context_block(search_results)
     return (
-        f"Knowledge base context:\n{context}\n\n"
-        f"Customer question: {query}\n\n"
-        f"Write the reply to the customer now."
-    )
-
-
-def build_no_match_prompt(query: str) -> str:
-    """Used when retrieval found nothing above the score threshold."""
-    return (
-        "No relevant knowledge base entries were found for this question.\n\n"
-        f"Customer question: {query}\n\n"
-        "Politely tell the customer you don't have that information on hand and "
-        "suggest they reach out to human support for a definitive answer."
+        f"Knowledge base context (may be empty or irrelevant if this isn't "
+        f"a {COMPANY_NAME}-specific question):\n{context}\n\n"
+        f"Customer message: {query}\n\n"
+        f"Write the reply now."
     )
 
 
@@ -66,39 +77,16 @@ def build_messages(query: str, search_results: list, history: list, language_nam
     """
     Build the full message list sent to the LLM, including prior conversation
     turns so the model can understand follow-up questions and references.
-
-    Args:
-        query: The current user question.
-        search_results: Retriever results for the CURRENT question only.
-        history: List of {"role": "user"/"assistant", "content": str} dicts
-                 from earlier turns in this conversation (oldest first).
-        language_name: Human-readable name of the language to reply in
-                       (e.g. "Romanian"), detected from the customer's message.
-                       The knowledge base itself stays in English — only the
-                       generated reply is translated.
-
-    Returns:
-        A list of message dicts ready to pass to the chat completion API.
     """
-    system_prompt = SYSTEM_PROMPT
+    system_prompt = build_system_prompt()
     if language_name != "English":
         system_prompt += (
             f"\n\nIMPORTANT: The customer is writing in {language_name}. "
-            f"Reply entirely in {language_name}, even though the knowledge base "
-            f"context below is in English. Translate the relevant information "
-            f"naturally — don't just translate word-for-word."
+            f"Reply entirely in {language_name}. Translate any relevant "
+            f"knowledge base content naturally — don't translate word-for-word."
         )
 
     messages = [{"role": "system", "content": system_prompt}]
-
-    # Include prior turns as-is, so the model has conversational context.
     messages.extend(history)
-
-    # The current turn always includes the freshly retrieved knowledge base context.
-    if search_results:
-        current_prompt = build_user_prompt(query, search_results)
-    else:
-        current_prompt = build_no_match_prompt(query)
-
-    messages.append({"role": "user", "content": current_prompt})
+    messages.append({"role": "user", "content": build_user_prompt(query, search_results)})
     return messages

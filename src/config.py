@@ -80,3 +80,9 @@ CHROMA_PERSIST_DIR = BASE_DIR / "chroma_db"
 # Set a secret value here (and in .env) to protect /admin endpoints.
 # Leave empty during local development if you don't need protection.
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+
+# --------------------------------------------------
+# Business Identity (customize per client deployment)
+# --------------------------------------------------
+COMPANY_NAME = os.getenv("COMPANY_NAME", "Our Company")
+BUSINESS_TYPE = os.getenv("BUSINESS_TYPE", "online store")
