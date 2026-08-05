@@ -55,7 +55,9 @@ class _RemoteHFEmbeddingFunction:
 
     def __init__(self, api_key: str, model_name: str):
         self.api_key = api_key
-        self.api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+        # Hugging Face retired the old api-inference.huggingface.co domain in
+        # favor of this new "Inference Providers" router endpoint.
+        self.api_url = f"https://router.huggingface.co/hf-inference/models/{model_name}/pipeline/feature-extraction"
 
     def name(self) -> str:
         return "remote-hf-embedding-function"
