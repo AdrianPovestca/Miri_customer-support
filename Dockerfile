@@ -27,4 +27,4 @@ EXPOSE 8000
 
 # Run the API with Uvicorn. --host 0.0.0.0 is required so the container
 # accepts connections from outside itself, not just localhost.
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"]
