@@ -86,3 +86,12 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 # --------------------------------------------------
 COMPANY_NAME = os.getenv("COMPANY_NAME", "Our Company")
 BUSINESS_TYPE = os.getenv("BUSINESS_TYPE", "online store")
+
+# --------------------------------------------------
+# Embedding Provider (fixes out-of-memory on small hosts like Render free tier)
+# --------------------------------------------------
+# "local" loads the model directly (needs ~500MB+ RAM) — fine for Codespaces/local dev.
+# "remote" calls Hugging Face's free Inference API instead — near-zero RAM usage,
+# same model, same quality, just computed off-server. Needs HF_API_TOKEN.
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "local")
+HF_API_TOKEN = os.getenv("HF_API_TOKEN", "")

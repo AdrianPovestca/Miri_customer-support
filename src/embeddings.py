@@ -11,10 +11,19 @@ Unlike the TF-IDF retriever (which treats each whole .md file as one
 document), this module splits each file into individual Q&A chunks, so
 matching is much more precise.
 
+Embedding provider:
+- "local" (default): loads the sentence-transformers model directly into
+  this process. Needs ~500MB+ RAM — fine for Codespaces/local dev, but can
+  exceed the memory limit on small free hosting tiers (e.g. Render's 512MB
+  free plan), causing the process to be killed.
+- "remote": calls Hugging Face's free Inference API instead, so the model
+  never loads locally. Same model, same search quality, near-zero RAM
+  footprint on this server. Requires HF_API_TOKEN (free, from
+  huggingface.co/settings/tokens).
+
 If chromadb / sentence-transformers aren't installed, or anything goes
 wrong building/querying the index, callers should catch the exception and
-fall back to retriever.search() (TF-IDF). This module never silently
-returns wrong results — it either works correctly or raises.
+fall back to retriever.search() (TF-IDF).
 """
 
 import logging
@@ -22,7 +31,10 @@ import re
 from pathlib import Path
 from typing import List, Dict
 
-from config import KNOWLEDGE_BASE_DIR, EMBEDDING_MODEL, CHROMA_PERSIST_DIR, TOP_K_RESULTS
+from config import (
+    KNOWLEDGE_BASE_DIR, EMBEDDING_MODEL, CHROMA_PERSIST_DIR, TOP_K_RESULTS,
+    EMBEDDING_PROVIDER, HF_API_TOKEN,
+)
 from models import Document
 
 logger = logging.getLogger(__name__)
@@ -40,7 +52,7 @@ def _chunk_knowledge_base() -> List[Document]:
     precise, focused text to match against.
     """
     chunks: List[Document] = []
-    md_files = sorted(Path(KNOWLEDGE_BASE_DIR).glob("*.md"))
+    md_files = sorted(Path(KNOWLEDGE_BASE_DIR).glob("*.md")) + sorted(Path(KNOWLEDGE_BASE_DIR).glob("*.txt"))
 
     for path in md_files:
         text = path.read_text(encoding="utf-8")
@@ -61,11 +73,31 @@ def _chunk_knowledge_base() -> List[Document]:
                     )
                 )
 
-        # Fallback: if a file has no "## Question" headings, index it whole
         if not found_any:
             chunks.append(Document(title=path.stem, filename=path.name, content=text))
 
     return chunks
+
+
+def _build_embedding_function():
+    """Choose local vs. remote embedding computation based on EMBEDDING_PROVIDER."""
+    from chromadb.utils import embedding_functions
+
+    if EMBEDDING_PROVIDER == "remote" and HF_API_TOKEN:
+        logger.info(f"Using remote Hugging Face Inference API for embeddings ({EMBEDDING_MODEL})")
+        return embedding_functions.HuggingFaceEmbeddingFunction(
+            api_key=HF_API_TOKEN,
+            model_name=f"sentence-transformers/{EMBEDDING_MODEL}",
+        )
+
+    if EMBEDDING_PROVIDER == "remote" and not HF_API_TOKEN:
+        logger.warning(
+            "EMBEDDING_PROVIDER=remote but HF_API_TOKEN is not set — "
+            "falling back to loading the model locally."
+        )
+
+    logger.info(f"Loading local sentence-transformers model ({EMBEDDING_MODEL})")
+    return embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
 
 
 def _get_collection():
@@ -79,11 +111,8 @@ def _get_collection():
         return _collection
 
     import chromadb
-    from chromadb.utils import embedding_functions
 
-    embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name=EMBEDDING_MODEL
-    )
+    embedding_fn = _build_embedding_function()
 
     client = chromadb.PersistentClient(path=str(CHROMA_PERSIST_DIR))
     collection = client.get_or_create_collection(
@@ -91,7 +120,6 @@ def _get_collection():
         embedding_function=embedding_fn,
     )
 
-    # Build the index only if it's empty (cached across runs otherwise).
     if collection.count() == 0:
         logger.info("Building vector index for the first time (this may take a moment)...")
         chunks = _chunk_knowledge_base()
@@ -112,14 +140,9 @@ def semantic_search(query: str, top_k: int = None) -> List[Dict]:
     """
     Search the knowledge base using semantic (embedding-based) similarity.
 
-    Args:
-        query: The user's question.
-        top_k: Number of results to return (defaults to config.TOP_K_RESULTS).
-
     Returns:
         List of {"document": Document, "score": float} — same shape as
-        retriever.search(), so it's a drop-in alternative. Score is a
-        similarity score in roughly [0, 1], higher = more relevant.
+        retriever.search(), so it's a drop-in alternative.
     """
     top_k = top_k or TOP_K_RESULTS
     collection = _get_collection()
@@ -132,8 +155,6 @@ def semantic_search(query: str, top_k: int = None) -> List[Dict]:
     distances = results.get("distances", [[]])[0]
 
     for content, meta, distance in zip(documents, metadatas, distances):
-        # Chroma returns a distance (lower = more similar); convert to a
-        # 0-1 similarity score so it's comparable in spirit to TF-IDF scores.
         similarity = 1.0 / (1.0 + distance)
         output.append({
             "document": Document(
@@ -146,12 +167,12 @@ def semantic_search(query: str, top_k: int = None) -> List[Dict]:
 
     return output
 
+
 def rebuild_index() -> int:
     """
     Delete and rebuild the vector index from whatever files currently exist
     in knowledge_base/. Call this after uploading, replacing, or deleting
-    knowledge base documents (e.g. from the admin panel), so search reflects
-    the new content immediately, without waiting for a process restart.
+    knowledge base documents, or after switching EMBEDDING_PROVIDER.
 
     Returns the number of chunks indexed.
     """
@@ -162,12 +183,13 @@ def rebuild_index() -> int:
     try:
         client.delete_collection("knowledge_base")
     except Exception:
-        pass  # collection may not exist yet on a fresh install
+        pass
 
-    _collection = None  # force _get_collection() to rebuild from scratch
+    _collection = None
     collection = _get_collection()
     return collection.count()
-    
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
