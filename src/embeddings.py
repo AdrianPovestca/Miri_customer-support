@@ -16,8 +16,9 @@ Embedding provider:
   this process. Needs ~500MB+ RAM — fine for Codespaces/local dev, but can
   exceed the memory limit on small free hosting tiers (e.g. Render's 512MB
   free plan), causing the process to be killed.
-- "remote": calls Hugging Face's free Inference API instead, so the model
-  never loads locally. Same model, same search quality, near-zero RAM
+- "remote": calls Hugging Face's free Inference API instead, via a small
+  custom embedding function (not chromadb's built-in one, which pointed at
+  an outdated endpoint). Same model, same search quality, near-zero RAM
   footprint on this server. Requires HF_API_TOKEN (free, from
   huggingface.co/settings/tokens).
 
@@ -43,6 +44,33 @@ CATEGORY_PATTERN = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 QA_PATTERN = re.compile(r"^##\s+(.+?)\n(.*?)(?=^##\s+|\Z)", re.MULTILINE | re.DOTALL)
 
 _collection = None  # lazily initialized, cached for the lifetime of the process
+
+
+class _RemoteHFEmbeddingFunction:
+    """
+    Minimal, self-contained Hugging Face Inference API embedding function.
+    Written directly (rather than relying on chromadb's built-in wrapper)
+    for full control over the endpoint and error handling.
+    """
+
+    def __init__(self, api_key: str, model_name: str):
+        self.api_key = api_key
+        self.api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+
+    def name(self) -> str:
+        return "remote-hf-embedding-function"
+
+    def __call__(self, input):
+        import requests
+
+        response = requests.post(
+            self.api_url,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={"inputs": input, "options": {"wait_for_model": True}},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
 
 
 def _chunk_knowledge_base() -> List[Document]:
@@ -81,11 +109,9 @@ def _chunk_knowledge_base() -> List[Document]:
 
 def _build_embedding_function():
     """Choose local vs. remote embedding computation based on EMBEDDING_PROVIDER."""
-    from chromadb.utils import embedding_functions
-
     if EMBEDDING_PROVIDER == "remote" and HF_API_TOKEN:
         logger.info(f"Using remote Hugging Face Inference API for embeddings ({EMBEDDING_MODEL})")
-        return embedding_functions.HuggingFaceEmbeddingFunction(
+        return _RemoteHFEmbeddingFunction(
             api_key=HF_API_TOKEN,
             model_name=f"sentence-transformers/{EMBEDDING_MODEL}",
         )
@@ -96,6 +122,7 @@ def _build_embedding_function():
             "falling back to loading the model locally."
         )
 
+    from chromadb.utils import embedding_functions
     logger.info(f"Loading local sentence-transformers model ({EMBEDDING_MODEL})")
     return embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
 
