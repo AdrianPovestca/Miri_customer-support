@@ -1,6 +1,6 @@
 <div align="center">
 
-# miri
+# Miri
 
 **An AI customer support platform that learns from your business — not a fixed script.**
 
