@@ -17,10 +17,10 @@ Embedding provider:
   exceed the memory limit on small free hosting tiers (e.g. Render's 512MB
   free plan), causing the process to be killed.
 - "remote": calls Hugging Face's free Inference API instead, via a small
-  custom embedding function (not chromadb's built-in one, which pointed at
-  an outdated endpoint). Same model, same search quality, near-zero RAM
-  footprint on this server. Requires HF_API_TOKEN (free, from
-  huggingface.co/settings/tokens).
+  custom embedding function. Same model, same search quality, near-zero
+  RAM footprint on this server. Requires HF_API_TOKEN (free, from
+  huggingface.co/settings/tokens — make sure "Make calls to Inference
+  Providers" is checked when creating the token).
 
 If chromadb / sentence-transformers aren't installed, or anything goes
 wrong building/querying the index, callers should catch the exception and
@@ -44,19 +44,18 @@ CATEGORY_PATTERN = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 QA_PATTERN = re.compile(r"^##\s+(.+?)\n(.*?)(?=^##\s+|\Z)", re.MULTILINE | re.DOTALL)
 
 _collection = None  # lazily initialized, cached for the lifetime of the process
+_embedding_fn = None  # cached alongside _collection, reused to embed queries directly
 
 
 class _RemoteHFEmbeddingFunction:
     """
     Minimal, self-contained Hugging Face Inference API embedding function.
-    Written directly (rather than relying on chromadb's built-in wrapper)
-    for full control over the endpoint and error handling.
+    Written directly (rather than relying on chromadb's built-in wrapper,
+    which pointed at the now-decommissioned api-inference.huggingface.co).
     """
 
     def __init__(self, api_key: str, model_name: str):
         self.api_key = api_key
-        # Hugging Face retired the old api-inference.huggingface.co domain in
-        # favor of this new "Inference Providers" router endpoint.
         self.api_url = f"https://router.huggingface.co/hf-inference/models/{model_name}/pipeline/feature-extraction"
 
     def name(self) -> str:
@@ -71,8 +70,22 @@ class _RemoteHFEmbeddingFunction:
             json={"inputs": input, "options": {"wait_for_model": True}},
             timeout=30,
         )
-        response.raise_for_status()
+        if not response.ok:
+            raise RuntimeError(
+                f"Hugging Face API error {response.status_code}: {response.text} "
+                f"(input type: {type(input).__name__}, input preview: {str(input)[:200]!r})"
+            )
         return response.json()
+
+    def embed_documents(self, input):
+        """Some chromadb versions call this explicitly for indexing documents."""
+        return self(input)
+
+    def embed_query(self, input):
+        """Some chromadb versions call this explicitly for embedding a search query."""
+        if isinstance(input, str):
+            return self([input])[0]
+        return self(input)
 
 
 def _chunk_knowledge_base() -> List[Document]:
@@ -134,6 +147,11 @@ def _get_collection():
     Get (or lazily build) the ChromaDB collection. The collection is
     persisted to disk under CHROMA_PERSIST_DIR, so embeddings are only
     computed once and reused across runs (embedding caching).
+
+    If the persisted collection was built with a different embedding
+    provider than the one currently configured (e.g. switched from local
+    to remote), ChromaDB refuses to open it. In that case we automatically
+    rebuild the index with the current provider instead of crashing.
     """
     global _collection
     if _collection is not None:
@@ -142,12 +160,25 @@ def _get_collection():
     import chromadb
 
     embedding_fn = _build_embedding_function()
-
+    global _embedding_fn
+    _embedding_fn = embedding_fn
     client = chromadb.PersistentClient(path=str(CHROMA_PERSIST_DIR))
-    collection = client.get_or_create_collection(
-        name="knowledge_base",
-        embedding_function=embedding_fn,
-    )
+
+    try:
+        collection = client.get_or_create_collection(
+            name="knowledge_base",
+            embedding_function=embedding_fn,
+        )
+    except Exception as exc:
+        if "embedding function" in str(exc).lower() or "conflict" in str(exc).lower():
+            logger.warning(f"Embedding function mismatch with persisted index, rebuilding: {exc}")
+            client.delete_collection("knowledge_base")
+            collection = client.get_or_create_collection(
+                name="knowledge_base",
+                embedding_function=embedding_fn,
+            )
+        else:
+            raise
 
     if collection.count() == 0:
         logger.info("Building vector index for the first time (this may take a moment)...")
@@ -176,7 +207,13 @@ def semantic_search(query: str, top_k: int = None) -> List[Dict]:
     top_k = top_k or TOP_K_RESULTS
     collection = _get_collection()
 
-    results = collection.query(query_texts=[query], n_results=top_k)
+    # Embed the query ourselves, directly, using the exact same code path we
+    # know works (verified by diagnose.py). This avoids relying on chromadb's
+    # internal call to our embedding function during .query(), which uses a
+    # different (and for the remote HF function, inconsistent/broken) code
+    # path than .add() does.
+    query_embedding = _embedding_fn([query])[0]
+    results = collection.query(query_embeddings=[query_embedding], n_results=top_k)
 
     output = []
     documents = results.get("documents", [[]])[0]
