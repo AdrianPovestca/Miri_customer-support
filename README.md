@@ -21,7 +21,7 @@
 
 It started as a learning project (build a support bot for a demo shoe store) and grew into something more useful: a **business-agnostic platform**. Swap the knowledge base, set a company name, and the same codebase serves a completely different business — no code changes required.
 
-A live instance is running right now, configured as a fictional retail brand, with a small product catalog (boots, apparel) and a full support knowledge base (shipping, returns, payments, account help). Try it: **[ai-customer-support-playbook.onrender.com/chat-ui](https://ai-customer-support-playbook.onrender.com/chat-ui)**
+A live instance is running right now, configured as a fictional retail brand, with a small product catalog (boots, apparel) and a full support knowledge base (shipping, returns, payments, account help). Try it: **[ai-customer-support-playbook.onrender.com/chat-ui](https://Miri_customer-support.gitonrender.com/chat-ui)**
 
 ---
 
