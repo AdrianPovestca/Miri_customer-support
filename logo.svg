@@ -1,0 +1,36 @@
+<svg width="420" height="170" viewBox="0 0 420 170" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<style>
+.wordtext { font-family: Georgia, 'Playfair Display', serif; font-size: 64px; font-weight: 700; fill: #16352a; }
+.dot { fill: #5c4a30; }
+.r1{stroke-dasharray:30;stroke-dashoffset:30;animation:grow 13s ease-in-out infinite;animation-delay:0s;}
+.r2{stroke-dasharray:26;stroke-dashoffset:26;animation:grow 13s ease-in-out infinite;animation-delay:.12s;}
+.r3{stroke-dasharray:26;stroke-dashoffset:26;animation:grow 13s ease-in-out infinite;animation-delay:.08s;}
+.r4{stroke-dasharray:16;stroke-dashoffset:16;animation:grow 13s ease-in-out infinite;animation-delay:.3s;}
+.r5{stroke-dasharray:14;stroke-dashoffset:14;animation:grow 13s ease-in-out infinite;animation-delay:.25s;}
+.r6{stroke-dasharray:9;stroke-dashoffset:9;animation:grow 13s ease-in-out infinite;animation-delay:.55s;}
+.r7{stroke-dasharray:9;stroke-dashoffset:9;animation:grow 13s ease-in-out infinite;animation-delay:.6s;}
+@keyframes grow{0%,72%{stroke-dashoffset:var(--len);}83%{stroke-dashoffset:0;}91%{stroke-dashoffset:0;}100%{stroke-dashoffset:var(--len);}}
+</style>
+</defs>
+
+<rect x="0" y="0" width="420" height="170" rx="18" fill="#f4efe8"/>
+
+<text x="150" y="105" class="wordtext">m</text>
+<text x="204" y="105" class="wordtext">ı</text>
+<text x="222" y="105" class="wordtext">r</text>
+<text x="252" y="105" class="wordtext">i</text>
+
+<g stroke="#5c4a30" stroke-linecap="round" fill="none">
+  <path class="r1" style="--len:30" stroke-width="1.6" d="M213,58 Q211,65 210,71 Q208,77 205,83"/>
+  <path class="r2" style="--len:26" stroke-width="1.4" d="M213,58 Q207,62 205,67 Q203,72 200,76"/>
+  <path class="r3" style="--len:26" stroke-width="1.4" d="M213,58 Q219,61 221,66 Q223,71 226,75"/>
+  <path class="r4" style="--len:16" stroke-width="1.1" d="M213,58 Q209,62 207,66 Q206,69 204,72"/>
+  <path class="r5" style="--len:14" stroke-width="1.1" d="M213,58 Q217,61 219,65"/>
+  <path class="r6" style="--len:9" stroke-width="0.9" d="M209,68 Q206,70 204,73"/>
+  <path class="r7" style="--len:9" stroke-width="0.9" d="M218,68 Q221,71 223,74"/>
+</g>
+<circle class="dot" cx="213" cy="53" r="5.5"/>
+
+<text x="210" y="140" text-anchor="middle" font-family="Georgia, serif" font-size="13" letter-spacing="5" fill="#8c8375">AI CUSTOMER SUPPORT</text>
+</svg>

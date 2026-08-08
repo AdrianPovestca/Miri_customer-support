@@ -1,251 +1,147 @@
 <div align="center">
+<img src="assets/logo.svg" width="340" alt="miri">
+</div>
 
-# Miri
+<br>
 
-**An AI customer support platform that learns from your business — not a fixed script.**
+**miri** is a customer support platform that answers from a business's own documents instead of a fixed script. Point it at a company's policies, FAQs, and product catalog, and it holds a natural conversation — in whatever language the customer writes in — while staying strictly honest about what it actually knows.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)
-![Status](https://img.shields.io/badge/status-live-brightgreen)
-[![Live Demo](https://img.shields.io/badge/demo-live-16352a)](https://ai-customer-support-playbook.onrender.com/chat-ui)
+It began as a small learning exercise: build a support bot for a fictional shoe store. It grew into something more useful — a platform where the business itself is a configuration detail, not something baked into the code. Change a company name, upload a new set of documents, and the same system serves a different business entirely.
 
-[Live Demo](https://ai-customer-support-playbook.onrender.com/chat-ui) · [Dashboard](https://ai-customer-support-playbook.onrender.com/dashboard) · [Admin Panel](https://ai-customer-support-playbook.onrender.com/admin)
+A live instance is running now, standing in as a small retail brand with its own catalog and support documentation.
+
+<div align="center">
+
+**[Try the live demo →](https://ai-customer-support-playbook.onrender.com/chat-ui)**
+
+[dashboard](https://ai-customer-support-playbook.onrender.com/dashboard) · [admin panel](https://ai-customer-support-playbook.onrender.com/admin)
 
 </div>
 
----
-
-## What is this?
-
-**miri** is a Retrieval-Augmented Generation (RAG) customer support platform. Point it at a business's own documents — policies, FAQs, product catalogs — and it answers customer questions naturally, in whatever language they write in, while staying honest about what it doesn't know.
-
-It started as a learning project (build a support bot for a demo shoe store) and grew into something more useful: a **business-agnostic platform**. Swap the knowledge base, set a company name, and the same codebase serves a completely different business — no code changes required.
-
-A live instance is running right now, configured as a fictional retail brand, with a small product catalog (boots, apparel) and a full support knowledge base (shipping, returns, payments, account help). Try it: **[ai-customer-support-playbook.onrender.com/chat-ui](https://Miri_customer-support.gitonrender.com/chat-ui)**
+<br>
 
 ---
 
-## Why it's not just "another chatbot wrapper"
+## The idea
 
-- **It's honest.** The system prompt draws a hard line: casual conversation and general knowledge get answered naturally, but anything specific to the business (prices, policies, procedures) comes *only* from the uploaded documents. If the answer isn't there, it says so — it doesn't invent a return policy.
-- **It's business-agnostic.** `COMPANY_NAME` and `BUSINESS_TYPE` are just environment variables. The knowledge base is fully swappable through the admin panel — no redeploy needed.
-- **It's memory-conscious.** Semantic search normally requires loading an embedding model into RAM. On a free-tier server with 512MB total, that's not viable — so embeddings can be computed via a remote API instead, keeping full search quality with near-zero local memory footprint.
-- **It degrades gracefully, everywhere.** No AI key configured? Falls back to template answers. Vector search unavailable? Falls back to TF-IDF. Nothing breaks; it just gets a little simpler.
+Most support bots fail in one of two ways: they're either too rigid, refusing anything that isn't a verbatim match to a script, or too loose, confidently inventing answers about things they were never told. Neither builds trust.
+
+miri draws a clear line. Ask it how its day is going, or something about the wider world, and it answers like any capable assistant would — no need to consult a document for that. Ask it something specific to the business — a return window, a shipping cost, whether a product exists — and it answers *only* from what it's actually been given. If the answer isn't there, it says so plainly, rather than guessing.
+
+That distinction is the whole design.
 
 ---
 
-## Features
+## How it's built
+
+A customer's message moves through a short pipeline, each stage with a fallback so the system never fails outright — it only ever gets a little simpler.
+
+The message is first checked for language, then matched against the knowledge base through semantic search: an embedding model that understands meaning rather than exact wording, so "Is PayPal an option?" correctly surfaces a document titled "What payment methods do you accept?" If that search is unavailable for any reason, a keyword-based search steps in instead.
+
+Alongside the current message, the system pulls in the ongoing conversation from a persistent store, so a question like "what if it doesn't arrive?" is understood in light of whatever was asked just before it — not as an isolated fragment.
+
+That context — the retrieved documents, the conversation so far, and the detected language — is handed to a language model, instructed to answer only from what was retrieved when the topic calls for it, and to speak naturally otherwise. If no model is configured, or the call fails, the system falls back to returning the raw matched document rather than breaking.
+
+```
+message
+  │
+  ├─ language detected
+  ├─ history loaded (SQLite)
+  │
+  ▼
+semantic search ── unavailable ──▶ keyword search
+  │
+  ▼
+language model, grounded in context ── unavailable ──▶ raw document fallback
+  │
+  ▼
+response, logged for monitoring, open for feedback
+```
+
+The embedding step deserves a note of its own. Semantic search normally means loading a model into memory — several hundred megabytes, easily more than a free hosting tier allows. miri can instead call a hosted inference API for that single step, keeping the same search quality with almost no memory footprint on the server itself. It's a small architectural choice, but the kind that decides whether a project can actually run somewhere for free or not.
+
+---
+
+## What it does
+
+**Understands, not just matches.** Semantic search over the knowledge base, with a keyword-based fallback when it isn't available.
+
+**Speaks the customer's language.** Detects the language of each message — with a confidence threshold, so a short ambiguous phrase in English doesn't get mistaken for something else — and replies fluently in kind.
+
+**Remembers the conversation.** History is persisted, not held only in memory, and a short follow-up is read in the context of what came before it.
+
+**Recommends, when asked to.** A customer describing a need rather than asking a direct question — a budget, an occasion, a style — gets a proposed product with a price, not a request to rephrase.
+
+**Learns from feedback.** Every response can be marked helpful or not, and that signal is tracked and summarized rather than discarded.
+
+**Is administered, not just deployed.** A protected panel lets someone replace the knowledge base entirely, inspect any stored conversation, or remove one — without touching code.
+
+**Shows its own health.** A live dashboard tracks request volume, response time, and how often the system relied on the language model versus its fallback.
+
+---
+
+## Built with
 
 | | |
 |---|---|
-| 🔍 **Semantic Search** | ChromaDB + Sentence Transformers understand meaning, not just keywords — "Is PayPal an option?" correctly matches "What payment methods do you accept?" |
-| 🌍 **Multi-Language** | Detects the customer's language (confidence-gated, to avoid misfires on short text) and replies fluently in it — tested in English, Romanian, German, Russian |
-| 💬 **Conversation Memory** | Persisted to SQLite; understands follow-ups ("What if it doesn't arrive?") using prior context, not just the current message |
-| 🛍️ **Product Recommendations** | When a customer describes a need ("boots for everyday wear, budget $150") instead of asking a direct question, it proactively recommends a matching product with price |
-| 👍 **Feedback Loop** | Every response can be rated helpful/not helpful; tracked and summarized for review |
-| 📊 **Live Dashboard** | Auto-refreshing view of request volume, response times, AI vs. fallback rate, and satisfaction rate |
-| 🔐 **Admin Panel** | Upload/replace/delete knowledge base files (auto-reindexes), browse and manage stored conversations — token-protected |
-| 🐳 **Dockerized** | One command to run anywhere: `docker compose up --build` |
-| 🚀 **REST API** | FastAPI-based, with a plain browser chat UI (`/chat-ui`) for non-technical use |
-
----
-
-## Try it
-
-**[→ Open the live chat](https://ai-customer-support-playbook.onrender.com/chat-ui)**
-
-Some things to try:
-- *"How do I reset my password?"* — grounded knowledge base answer
-- *"Cum îmi resetez parola?"* — same question, in Romanian
-- *"I need boots for everyday wear, budget around $150"* — proactive product recommendation
-- *"How are you?"* — natural small talk, not a rigid refusal
-
-> **Note:** the free hosting tier spins down after inactivity — the first request after a while may take 20–30 seconds to wake up.
-
----
-
-## Architecture
-
-```
-Customer message
-      │
-      ▼
-┌─────────────────┐     ┌──────────────────────┐
-│ Language         │     │ Conversation history  │
-│ detection        │     │ (SQLite, persisted)   │
-└────────┬─────────┘     └──────────┬───────────┘
-         │                          │
-         ▼                          ▼
-┌──────────────────────────────────────────────┐
-│  Semantic search (remote embeddings via HF)   │
-│  ──── falls back to ────                      │
-│  TF-IDF keyword search                        │
-└────────────────────┬───────────────────────────┘
-                      ▼
-┌──────────────────────────────────────────────┐
-│  LLM generation (Groq, OpenAI-compatible)     │
-│  grounded in retrieved context + history      │
-│  ──── falls back to ────                      │
-│  Raw knowledge base template                  │
-└────────────────────┬───────────────────────────┘
-                      ▼
-              Response + feedback prompt
-                      │
-                      ▼
-              Analytics (timing, AI vs. fallback)
-```
-
-Every layer has a fallback. The bot never hard-fails — it just gets simpler.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| API | FastAPI + Uvicorn |
-| LLM | Groq (OpenAI-compatible API) |
-| Semantic Search | ChromaDB + Sentence Transformers (local or via Hugging Face Inference API) |
-| Keyword Search Fallback | TF-IDF (scikit-learn-style, hand-rolled) |
-| Language Detection | langdetect |
+| API | FastAPI, Uvicorn |
+| Language model | Groq, via an OpenAI-compatible interface |
+| Semantic search | ChromaDB with Sentence Transformers — local, or through a hosted inference API |
+| Fallback search | A small hand-written TF-IDF implementation |
 | Persistence | SQLite |
-| Containerization | Docker + Docker Compose |
+| Packaging | Docker |
 | Hosting | Render |
-| Testing | pytest |
 
 ---
 
-## Running it yourself
-
-### Prerequisites
-Python 3.8+, pip, Git.
-
-### Setup
+## Running it
 
 ```bash
-git clone https://github.com/AdrianPovestca/Miri_ai-customer-support.git
-cd Miri_ai-customer-support
+git clone https://github.com/AdrianPovestca/Miri_customer-support.git
+cd Miri_customer-support
 
 python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+source venv/bin/activate    # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
 ```
 
-### Configure `.env`
+The `.env` file needs a language model key and, if using semantic search on a memory-constrained host, a Hugging Face token for the remote embedding path:
 
 ```dotenv
-# LLM (Groq's free tier works well)
 OPENAI_API_KEY=your-groq-key
 OPENAI_BASE_URL=https://api.groq.com/openai/v1
-USE_AI_GENERATION=true
 
-# Semantic search
 USE_VECTOR_SEARCH=true
-# "local" loads the model directly (needs ~500MB RAM).
-# "remote" calls Hugging Face's free Inference API instead — use this on
-# small hosts. Needs a free token with "Inference" scope.
 EMBEDDING_PROVIDER=remote
 HF_API_TOKEN=your-hf-token
 
-# Business identity — change these to deploy for a different business
 COMPANY_NAME=Miri
 BUSINESS_TYPE=retail fashion store
-
-# Admin panel protection (leave empty for open access during local dev)
-ADMIN_TOKEN=
 ```
 
-### Run
+Then run it:
 
 ```bash
 cd src
 uvicorn api:app --reload --port 8000
 ```
 
-Then open:
-- `http://localhost:8000/chat-ui` — chat interface
-- `http://localhost:8000/dashboard` — analytics
-- `http://localhost:8000/admin` — manage knowledge base & conversations
+`/chat-ui` is the conversation itself; `/dashboard` shows how the system is performing; `/admin` manages what it knows.
 
-Or, with Docker:
-
-```bash
-docker compose up --build
-```
-
-### CLI mode
-
-```bash
-cd src
-python chatbot.py
-```
+A `docker compose up --build` works equally well, and a plain terminal interface is available through `python chatbot.py` for anyone who'd rather not open a browser at all.
 
 ---
 
-## Deploying to production
+## Where it stands
 
-This repo deploys as-is to any platform that runs a `Dockerfile` (Render, Fly.io, Railway). On the free tier of most hosts, set `EMBEDDING_PROVIDER=remote` — loading the embedding model locally can exceed a 512MB memory limit and get the process killed.
+Every stage of the original plan is built and running: a knowledge base with a working retriever, a language model layered grounded on top of it, semantic search replacing keyword matching, a production-shaped API with monitoring and containerization, and the features that turn a working demo into something closer to a product — multiple languages, memory that survives a restart, a way to learn from feedback, and an interface for someone non-technical to manage it.
 
-The live demo runs on [Render](https://render.com)'s free web service tier.
-
----
-
-## Project structure
-
-```
-Miri_ai-customer-support/
-├── src/
-│   ├── api.py                 # FastAPI app: chat, dashboard, admin, feedback
-│   ├── chatbot.py              # CLI entry point
-│   ├── static/
-│   │   ├── chat.html           # Browser chat UI
-│   │   ├── dashboard.html      # Analytics dashboard
-│   │   └── admin.html          # Admin panel (KB upload, conversation browser)
-│   ├── embeddings.py           # Semantic search (local or remote HF embeddings)
-│   ├── retriever.py            # TF-IDF fallback search
-│   ├── responder.py            # Response generation (AI + template fallback)
-│   ├── prompts.py              # System prompt, business-agnostic
-│   ├── language.py             # Language detection
-│   ├── feedback.py             # Feedback storage & summary
-│   ├── analytics.py            # Request monitoring
-│   ├── database.py             # Persistent conversation history (SQLite)
-│   ├── document_loader.py
-│   ├── models.py
-│   ├── config.py
-│   └── logger.py
-├── knowledge_base/              # Swappable per business — currently a demo retail catalog
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── .env.example
-```
-
----
-
-## Roadmap (complete)
-
-- [x] **Foundation** — knowledge base, TF-IDF retriever, tests, logging
-- [x] **LLM Integration** — Groq, grounded prompting, conversation memory
-- [x] **Vector Search** — ChromaDB + Sentence Transformers, local or remote
-- [x] **Production** — REST API, Docker, monitoring dashboard, live deployment
-- [x] **Advanced Features** — multi-language, persistent history, feedback loop, admin panel, product recommendations
-
-## What's next
-
-- Persistent disk on hosting (current free tier resets on redeploy)
-- Multi-tenant support (multiple businesses on one deployment)
-- A/B testing prompt variations against feedback data
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+What's left is less about the system working and more about how far it could go: a persistent disk on hosting, so a redeploy doesn't reset stored conversation history; genuine multi-tenancy, so one deployment could serve several businesses at once instead of one; and using the feedback already being collected to actually refine how the assistant responds, rather than only displaying it.
 
 ---
 
 <div align="center">
-<sub>Built as a learning project, shipped as a working product.</sub>
+<sub>MIT licensed. Built to learn how far a small idea could be taken.</sub>
 </div>
