@@ -16,6 +16,12 @@ A live instance is running now, standing in as a small retail brand with its own
 
 [dashboard](https://ai-customer-support-playbook.onrender.com/dashboard) · [admin panel](https://ai-customer-support-playbook.onrender.com/admin)
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-16352a)](LICENSE)
+![Python 3.8+](https://img.shields.io/badge/python-3.8+-5c4a30)
+![Status](https://img.shields.io/badge/status-live-16352a)
+
+<img src="assets/banner.svg" width="100%" alt="">
+
 </div>
 
 <br>
