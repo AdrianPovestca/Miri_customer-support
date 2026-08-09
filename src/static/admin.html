@@ -2,52 +2,62 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Admin — AI Customer Support Playbook</title>
+<title>miri — Admin</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root {
-    --bg: #0d0e12; --card: #16181d; --border: #24262c;
-    --text: #e8e9ec; --muted: #8b8d97; --accent: #6ee7b7; --negative: #f87171;
+    --bg: #0e2620; --card: #152e26; --border: #234238;
+    --text: #f4efe8; --muted: #8ea89c; --accent: #b6994f;
+    --negative: #c47a6c;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
-    padding: 40px 24px;
   }
   .wrap { max-width: 900px; margin: 0 auto; }
-  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px 0; }
-  h2 { font-size: 15px; font-weight: 600; margin: 32px 0 12px 0; }
-  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  header {
+    position: relative; overflow: hidden;
+    padding: 32px 24px 26px; border-bottom: 1px solid var(--border);
+  }
+  .header-art { position: absolute; right: 0; top: 0; bottom: 0; width: 320px; opacity: 0.9; pointer-events: none; }
+  .header-content { position: relative; z-index: 1; }
+  h1 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 28px; font-weight: 700; margin: 0; color: var(--text); letter-spacing: 0.5px;
+  }
+  .subtitle { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px; }
+  .content { padding: 28px 24px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 32px 0 12px 0; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  h2:first-of-type { margin-top: 0; }
   .token-bar { display: flex; gap: 8px; margin-bottom: 20px; }
   input[type="password"], input[type="text"], input[type="file"] {
     flex: 1; background: var(--card); border: 1px solid var(--border);
-    color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 13px;
+    color: var(--text); padding: 10px 12px; border-radius: 10px; font-size: 13px;
   }
   button {
-    background: var(--accent); color: #0d0e12; border: none;
-    padding: 10px 16px; border-radius: 8px; font-weight: 600;
-    font-size: 13px; cursor: pointer;
+    background: var(--accent); color: var(--bg); border: none;
+    padding: 10px 18px; border-radius: 10px; font-weight: 600;
+    font-size: 13px; cursor: pointer; letter-spacing: 0.02em;
   }
-  button.secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
-  button.danger { background: var(--negative); color: #0d0e12; }
+  button.danger { background: var(--negative); }
   table {
     width: 100%; border-collapse: collapse; background: var(--card);
-    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
     margin-bottom: 20px;
   }
   th, td { text-align: left; padding: 10px 14px; font-size: 13px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 500; }
   tr:last-child td { border-bottom: none; }
   tr.clickable { cursor: pointer; }
-  tr.clickable:hover { background: #1c1e24; }
+  tr.clickable:hover { background: #1a352c; }
   .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
   .status { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
   .status.error { color: var(--negative); }
   .messages { display: flex; flex-direction: column; gap: 10px; }
-  .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; max-width: 80%; }
+  .msg { padding: 10px 14px; border-radius: 10px; font-size: 13px; max-width: 80%; }
   .msg.user { background: var(--card); border: 1px solid var(--border); align-self: flex-end; }
-  .msg.assistant { background: #1a2b24; border: 1px solid var(--accent); align-self: flex-start; }
+  .msg.assistant { background: #1a352c; border: 1px solid var(--border); border-left: 3px solid var(--accent); align-self: flex-start; }
   .msg .role { font-size: 10px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
   .back-link { color: var(--accent); font-size: 13px; cursor: pointer; margin-bottom: 16px; display: inline-block; }
   .upload-row { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
@@ -56,9 +66,38 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>🔐 Admin Panel</h1>
-  <div class="subtitle">Manage the knowledge base and browse stored conversations</div>
+  <header>
+    <svg class="header-art" viewBox="0 0 320 130" preserveAspectRatio="xMidYMid slice">
+      <g fill="none" stroke="#b6994f" stroke-width="1.3" stroke-linecap="round">
+        <path d="M0,90 L45,35 L70,60 L100,15 L135,55 L165,30 L200,65 L230,25 L280,80 L320,95"/>
+        <path d="M10,105 L50,50"/>
+        <path d="M25,110 L60,58"/>
+        <path d="M40,112 L72,64"/>
+        <path d="M55,115 L88,40"/>
+        <path d="M70,118 L100,25"/>
+        <path d="M85,120 L112,45"/>
+        <path d="M100,120 L128,50"/>
+        <path d="M115,120 L140,60"/>
+        <path d="M130,120 L155,42"/>
+        <path d="M145,120 L168,38"/>
+        <path d="M160,120 L182,55"/>
+        <path d="M175,120 L198,42"/>
+        <path d="M190,120 L212,35"/>
+        <path d="M205,120 L228,48"/>
+        <path d="M220,120 L245,60"/>
+        <path d="M235,120 L258,68"/>
+        <path d="M250,120 L270,78"/>
+        <path d="M265,120 L290,85"/>
+        <path d="M280,120 L305,90"/>
+      </g>
+    </svg>
+    <div class="header-content">
+      <h1>miri</h1>
+      <div class="subtitle">Admin Panel</div>
+    </div>
+  </header>
 
+  <div class="content">
   <div class="token-bar">
     <input type="password" id="token" placeholder="Admin token (leave empty if none is set)">
     <button onclick="loadEverything()">Load</button>
@@ -66,8 +105,7 @@
 
   <div id="status" class="status"></div>
 
-  <!-- Knowledge base management -->
-  <h2>📚 Knowledge Base</h2>
+  <h2>Knowledge Base</h2>
   <div class="upload-row">
     <input type="file" id="kb-file" accept=".md,.txt">
     <button onclick="uploadKbFile()">Upload</button>
@@ -81,8 +119,7 @@
 
   <hr class="section-divider">
 
-  <!-- Conversation sessions -->
-  <h2>💬 Conversations</h2>
+  <h2>Conversations</h2>
   <div id="sessions-view">
     <table>
       <thead><tr><th>Session ID</th><th>Messages</th><th>Started</th><th>Last Active</th><th></th></tr></thead>
@@ -96,6 +133,7 @@
     <span class="back-link" onclick="showSessionsView()">← Back to sessions</span>
     <h3 id="detail-session-id"></h3>
     <div class="messages" id="detail-messages"></div>
+  </div>
   </div>
 </div>
 
@@ -120,7 +158,6 @@ function loadEverything() {
   loadSessions();
 }
 
-// --- Knowledge base ---
 async function loadKbFiles() {
   try {
     const res = await apiFetch('/admin/knowledge-base');
@@ -182,7 +219,6 @@ async function deleteKbFile(filename) {
   }
 }
 
-// --- Sessions ---
 async function loadSessions() {
   try {
     const res = await apiFetch('/admin/sessions');
