@@ -117,7 +117,7 @@ class StatsResponse(BaseModel):
 app = FastAPI(
     title="AI Customer Support Playbook API",
     description="Configurable RAG-based customer support API — swap the knowledge base to deploy for any business.",
-    version="1.1.0",
+    version="1.2.0",
 )
 
 _document_count = 0
@@ -133,6 +133,18 @@ def _refresh_document_count():
 def on_startup():
     _refresh_document_count()
     database.init_db()
+
+    # Warm up the semantic search index now, at startup, instead of letting
+    # the first real user question pay for building/loading it. This won't
+    # eliminate the delay caused by the free hosting tier waking up from
+    # sleep, but it removes the extra delay stacked on top of that.
+    if _semantic_search is not None:
+        try:
+            _semantic_search("warm up")
+            logger.info("Semantic search index warmed up at startup")
+        except Exception as exc:
+            logger.warning(f"Semantic search warm-up failed (will retry on first real query): {exc}")
+
     logger.info(f"API started, {_document_count} knowledge base document(s) loaded")
 
 
@@ -219,10 +231,6 @@ def submit_feedback(request: FeedbackRequest):
 # Admin interface
 # --------------------------------------------------
 def _check_admin_token(x_admin_token: Optional[str]) -> None:
-    """
-    Simple shared-secret protection — adequate for a portfolio/small-business
-    deployment, not a substitute for real per-user authentication.
-    """
     if not ADMIN_TOKEN:
         logger.warning("ADMIN_TOKEN not set — admin endpoints are unprotected.")
         return
@@ -258,7 +266,6 @@ def admin_delete_session(session_id: str, x_admin_token: Optional[str] = Header(
 
 
 def _reindex_after_kb_change() -> Optional[int]:
-    """Refresh document count and rebuild the vector index after a knowledge base change."""
     _refresh_document_count()
     if _rebuild_index is None:
         return None
@@ -271,7 +278,6 @@ def _reindex_after_kb_change() -> Optional[int]:
 
 @app.get("/admin/knowledge-base")
 def admin_list_kb_files(x_admin_token: Optional[str] = Header(None)):
-    """List every file currently in the knowledge base."""
     _check_admin_token(x_admin_token)
     files = sorted(p.name for p in Path(KNOWLEDGE_BASE_DIR).glob("*.md")) + \
             sorted(p.name for p in Path(KNOWLEDGE_BASE_DIR).glob("*.txt"))
@@ -280,11 +286,6 @@ def admin_list_kb_files(x_admin_token: Optional[str] = Header(None)):
 
 @app.post("/admin/knowledge-base/upload")
 async def admin_upload_kb_file(file: UploadFile = File(...), x_admin_token: Optional[str] = Header(None)):
-    """
-    Upload a .md or .txt file into the knowledge base. Replaces a file of
-    the same name if it already exists. Automatically rebuilds the vector
-    search index so the new content is searchable immediately.
-    """
     _check_admin_token(x_admin_token)
 
     if not file.filename.endswith((".md", ".txt")):
@@ -308,7 +309,6 @@ async def admin_upload_kb_file(file: UploadFile = File(...), x_admin_token: Opti
 
 @app.delete("/admin/knowledge-base/{filename}")
 def admin_delete_kb_file(filename: str, x_admin_token: Optional[str] = Header(None)):
-    """Remove a file from the knowledge base and rebuild the search index."""
     _check_admin_token(x_admin_token)
 
     path = Path(KNOWLEDGE_BASE_DIR) / filename
