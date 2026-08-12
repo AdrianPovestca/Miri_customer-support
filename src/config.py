@@ -55,7 +55,7 @@ LOG_FILE = LOGS_DIR / "app.log"
 # Using Groq (free tier, no credit card required) instead of paid OpenAI.
 # Groq's API is OpenAI-compatible, so the same 'openai' Python package works —
 # we just point it at Groq's server (OPENAI_BASE_URL) instead of OpenAI's.
-DEFAULT_MODEL = "llama-3.1-8b-instant"
+DEFAULT_MODEL = "openai/gpt-oss-20b"
 TEMPERATURE = 0.2
 MAX_TOKENS = 1000
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
