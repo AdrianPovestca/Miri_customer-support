@@ -3258,7 +3258,9 @@ async function loadStats() {
       feedback.negative ?? 0
     );
 
-    renderRecentQueries(data.recent_queries || []);
+    renderRecentQueries(
+      data.recent_queries || []
+    );
 
   } catch (error) {
 
@@ -3267,16 +3269,24 @@ async function loadStats() {
   }
 }
 
+
 function renderRecentQueries(queries) {
 
-  const body = document.getElementById("dashboard-queries");
+  const body =
+    document.getElementById("dashboard-queries");
+
+  if (!body) {
+    return;
+  }
 
   if (!queries.length) {
 
     body.innerHTML = `
       <tr>
         <td colspan="3">
-          <div class="empty-state">No requests yet.</div>
+          <div class="empty-state">
+            No requests yet.
+          </div>
         </td>
       </tr>
     `;
@@ -3290,15 +3300,24 @@ function renderRecentQueries(queries) {
     .slice(0, 10)
     .map(query => {
 
-      const source = query.used_ai_generation
-        ? "AI"
-        : "Template";
+      const source =
+        query.used_ai_generation
+          ? "AI"
+          : "Template";
 
       return `
         <tr>
-          <td>${escapeHtml(query.query || "")}</td>
-          <td>${Math.round(query.duration_ms || 0)} ms</td>
-          <td>${source}</td>
+          <td>
+            ${escapeHtml(query.query || "")}
+          </td>
+
+          <td>
+            ${Math.round(query.duration_ms || 0)} ms
+          </td>
+
+          <td>
+            ${source}
+          </td>
         </tr>
       `;
 
@@ -3306,13 +3325,19 @@ function renderRecentQueries(queries) {
     .join("");
 }
 
+
 /* =========================================================
    CONVERSATIONS
    ========================================================= */
 
 async function loadConversations() {
 
-  const list = document.getElementById("conversation-list");
+  const list =
+    document.getElementById("conversation-list");
+
+  if (!list) {
+    return;
+  }
 
   list.innerHTML = `
     <div class="empty-state">
@@ -3322,41 +3347,100 @@ async function loadConversations() {
 
   try {
 
-    /*
-     * The existing API protects this endpoint with the admin token.
-     * Therefore the normal workspace cannot silently access it when
-     * ADMIN_TOKEN is configured.
-     *
-     * We keep the UI ready for the endpoint and show a clean state
-     * if access is denied.
-     */
+    const token =
+      localStorage.getItem("miri_admin_token") || "";
 
-    const response = await fetch("/admin/sessions");
+    const headers = {};
 
-    if (!response.ok) {
-      throw new Error("Conversation access unavailable");
+    if (token) {
+      headers["X-Admin-Token"] = token;
     }
 
-    const data = await response.json();
+    const response = await fetch(
+      "/admin/sessions",
+      {
+        method: "GET",
+        headers
+      }
+    );
 
-    state.conversations = data.sessions || [];
+    if (!response.ok) {
 
-    renderConversations(state.conversations);
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        throw new Error("AUTH_REQUIRED");
+      }
 
-  } catch {
+      throw new Error(
+        "Conversation request failed"
+      );
+    }
 
-    list.innerHTML = `
-      <div class="empty-state">
-        Conversation history is available from the workspace admin area.
-      </div>
-    `;
+    const data =
+      await response.json();
 
+    state.conversations =
+      data.sessions || [];
+
+    renderConversations(
+      state.conversations
+    );
+
+  } catch (error) {
+
+    console.error(
+      "Conversations failed:",
+      error
+    );
+
+    if (
+      error.message === "AUTH_REQUIRED"
+    ) {
+
+      list.innerHTML = `
+        <div class="empty-state">
+
+          <div>
+            Admin authentication required.
+          </div>
+
+          <button
+            type="button"
+            class="secondary-button"
+            style="margin-top:12px;"
+            onclick="openAdminTokenSettings()"
+          >
+            Configure access
+          </button>
+
+        </div>
+      `;
+
+    } else {
+
+      list.innerHTML = `
+        <div class="empty-state">
+          Could not load conversations.
+        </div>
+      `;
+
+    }
   }
 }
 
+
 function renderConversations(items) {
 
-  const list = document.getElementById("conversation-list");
+  const list =
+    document.getElementById(
+      "conversation-list"
+    );
+
+  if (!list) {
+    return;
+  }
 
   if (!items.length) {
 
@@ -3369,69 +3453,178 @@ function renderConversations(items) {
     return;
   }
 
-  list.innerHTML = items.map(item => {
+  list.innerHTML =
+    items
+      .map(item => {
 
-    const session = item.session_id || "Unknown";
+        const session =
+          item.session_id || "Unknown";
 
-    return `
-      <div
-        class="conversation-item"
-        onclick="openConversation('${escapeAttr(session)}')"
-      >
+        return `
+          <div
+            class="conversation-item"
+            onclick="openConversation('${escapeAttr(session)}')"
+          >
 
-        <div class="conversation-avatar">
-          ${escapeHtml(session.slice(0, 1).toUpperCase())}
-        </div>
+            <div class="conversation-avatar">
+              ${escapeHtml(
+                session
+                  .slice(0, 1)
+                  .toUpperCase()
+              )}
+            </div>
 
-        <div class="conversation-main">
+            <div class="conversation-main">
 
-          <div class="conversation-title">
-            ${escapeHtml(session)}
+              <div class="conversation-title">
+                ${escapeHtml(session)}
+              </div>
+
+              <div class="conversation-preview">
+                ${item.message_count || 0}
+                messages
+              </div>
+
+            </div>
+
+            <div class="conversation-time">
+              ${escapeHtml(
+                item.last_active || ""
+              )}
+            </div>
+
           </div>
+        `;
 
-          <div class="conversation-preview">
-            ${item.message_count || 0} messages
-          </div>
-
-        </div>
-
-        <div class="conversation-time">
-          ${escapeHtml(item.last_active || "")}
-        </div>
-
-      </div>
-    `;
-
-  }).join("");
+      })
+      .join("");
 }
+
 
 function filterConversations() {
 
+  const search =
+    document.getElementById(
+      "conversation-search"
+    );
+
+  if (!search) {
+    return;
+  }
+
   const query =
-    document.getElementById("conversation-search")
-      .value
+    search.value
       .toLowerCase()
       .trim();
 
-  const filtered = state.conversations.filter(item =>
-    String(item.session_id || "")
-      .toLowerCase()
-      .includes(query)
-  );
+  const filtered =
+    state.conversations.filter(item => {
+
+      return String(
+        item.session_id || ""
+      )
+        .toLowerCase()
+        .includes(query);
+
+    });
 
   renderConversations(filtered);
 }
 
-function openConversation(sessionId) {
 
-  showToast("Conversation: " + sessionId);
+async function openConversation(sessionId) {
 
-  /*
-   * Full conversation viewer will be connected to
-   * /admin/sessions/{session_id} when authentication for the
-   * workspace UI is introduced.
-   */
+  if (!sessionId) {
+    return;
+  }
+
+  try {
+
+    const token =
+      localStorage.getItem(
+        "miri_admin_token"
+      ) || "";
+
+    const headers = {};
+
+    if (token) {
+      headers["X-Admin-Token"] = token;
+    }
+
+    const response = await fetch(
+      "/admin/sessions/" +
+      encodeURIComponent(sessionId),
+      {
+        method: "GET",
+        headers
+      }
+    );
+
+    if (!response.ok) {
+
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        showToast(
+          "Admin authentication required"
+        );
+
+        return;
+      }
+
+      throw new Error(
+        "Conversation request failed"
+      );
+    }
+
+    const data =
+      await response.json();
+
+    /*
+     * The backend response is displayed
+     * through the existing conversation UI.
+     *
+     * If the endpoint returns a messages
+     * array, use it directly.
+     */
+
+    const messages =
+      data.messages || [];
+
+    if (!messages.length) {
+
+      showToast(
+        "No messages found"
+      );
+
+      return;
+    }
+
+    showToast(
+      `${messages.length} messages loaded`
+    );
+
+    console.log(
+      "Conversation:",
+      sessionId,
+      messages
+    );
+
+  } catch (error) {
+
+    console.error(
+      "Conversation failed:",
+      error
+    );
+
+    showToast(
+      "Could not load conversation"
+    );
+
+  }
 }
+
 
 /* =========================================================
    KNOWLEDGE BASE
@@ -3439,8 +3632,19 @@ function openConversation(sessionId) {
 
 async function loadKnowledge() {
 
-  const list = document.getElementById("knowledge-list");
-  const count = document.getElementById("knowledge-count");
+  const list =
+    document.getElementById(
+      "knowledge-list"
+    );
+
+  const count =
+    document.getElementById(
+      "knowledge-count"
+    );
+
+  if (!list) {
+    return;
+  }
 
   list.innerHTML = `
     <div class="empty-state">
@@ -3450,18 +3654,56 @@ async function loadKnowledge() {
 
   try {
 
-    const response = await fetch("/admin/knowledge-base");
+    const token =
+      localStorage.getItem(
+        "miri_admin_token"
+      ) || "";
 
-    if (!response.ok) {
-      throw new Error("Knowledge access unavailable");
+    const headers = {};
+
+    if (token) {
+      headers["X-Admin-Token"] = token;
     }
 
-    const data = await response.json();
+    const response =
+      await fetch(
+        "/admin/knowledge-base",
+        {
+          method: "GET",
+          headers
+        }
+      );
 
-    count.textContent =
-      `${data.documents_loaded || 0} document(s) loaded`;
+    if (!response.ok) {
 
-    if (!data.files || !data.files.length) {
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        throw new Error(
+          "AUTH_REQUIRED"
+        );
+      }
+
+      throw new Error(
+        "Knowledge request failed"
+      );
+    }
+
+    const data =
+      await response.json();
+
+    if (count) {
+
+      count.textContent =
+        `${data.documents_loaded || 0} document(s) loaded`;
+
+    }
+
+    if (
+      !data.files ||
+      !data.files.length
+    ) {
 
       list.innerHTML = `
         <div class="empty-state">
@@ -3472,270 +3714,390 @@ async function loadKnowledge() {
       return;
     }
 
-    list.innerHTML = data.files.map(file => {
+    list.innerHTML =
+      data.files
+        .map(file => {
 
-      const extension =
-        file.split(".").pop().toUpperCase();
+          const extension =
+            file
+              .split(".")
+              .pop()
+              .toUpperCase();
 
-      return `
-        <div class="kb-item">
+          return `
+            <div class="kb-item">
 
-          <div class="file-icon">
-            ${escapeHtml(extension)}
+              <div class="file-icon">
+                ${escapeHtml(extension)}
+              </div>
+
+              <div class="kb-info">
+
+                <div class="kb-name">
+                  ${escapeHtml(file)}
+                </div>
+
+                <div class="kb-meta">
+                  Knowledge source
+                </div>
+
+              </div>
+
+            </div>
+          `;
+
+        })
+        .join("");
+
+  } catch (error) {
+
+    console.error(
+      "Knowledge failed:",
+      error
+    );
+
+    if (count) {
+      count.textContent =
+        "Authentication required";
+    }
+
+    if (
+      error.message === "AUTH_REQUIRED"
+    ) {
+
+      list.innerHTML = `
+        <div class="empty-state">
+
+          <div>
+            Admin authentication required.
           </div>
 
-          <div class="kb-info">
-
-            <div class="kb-name">
-              ${escapeHtml(file)}
-            </div>
-
-            <div class="kb-meta">
-              Knowledge source
-            </div>
-
-          </div>
+          <button
+            type="button"
+            class="secondary-button"
+            style="margin-top:12px;"
+            onclick="openAdminTokenSettings()"
+          >
+            Configure access
+          </button>
 
         </div>
       `;
 
-    }).join("");
+    } else {
 
-  } catch {
+      list.innerHTML = `
+        <div class="empty-state">
+          Could not load knowledge base.
+        </div>
+      `;
 
-    count.textContent = "Admin authentication required";
-
-    list.innerHTML = `
-      <div class="empty-state">
-        Knowledge base management is connected to the existing admin API.
-      </div>
-    `;
-
+    }
   }
 }
+
 
 async function uploadKnowledge() {
 
-  const input = document.getElementById("knowledge-file");
+  const fileInput =
+    document.getElementById(
+      "knowledge-file"
+    );
 
-  if (!input.files.length) {
+  if (
+    !fileInput ||
+    !fileInput.files.length
+  ) {
     return;
   }
 
-  const file = input.files[0];
+  const token =
+    localStorage.getItem(
+      "miri_admin_token"
+    ) || "";
 
-  if (!file.name.endsWith(".md") && !file.name.endsWith(".txt")) {
+  const file =
+    fileInput.files[0];
 
-    showToast("Only .md and .txt files are supported");
+  const filename =
+    file.name.toLowerCase();
 
-    input.value = "";
+  if (
+    !filename.endsWith(".md") &&
+    !filename.endsWith(".txt")
+  ) {
+
+    showToast(
+      "Only .md and .txt files are supported"
+    );
+
+    fileInput.value = "";
 
     return;
   }
 
-  const formData = new FormData();
+  const formData =
+    new FormData();
 
-  formData.append("file", file);
+  formData.append(
+    "file",
+    file
+  );
 
-  showToast("Uploading knowledge...");
+  showToast(
+    "Uploading knowledge..."
+  );
 
   try {
 
-    const response = await fetch(
-      "/admin/knowledge-base/upload",
-      {
-        method: "POST",
-        body: formData
-      }
-    );
+    const headers = {};
 
-    if (!response.ok) {
-      throw new Error("Upload failed");
+    if (token) {
+      headers["X-Admin-Token"] = token;
     }
 
-    showToast("Knowledge uploaded");
+    const response =
+      await fetch(
+        "/admin/knowledge-base/upload",
+        {
+          method: "POST",
+          headers,
+          body: formData
+        }
+      );
 
-    loadKnowledge();
+    if (!response.ok) {
 
-  } catch {
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
 
-    showToast("Knowledge upload requires admin authentication");
+        showToast(
+          "Admin authentication required"
+        );
+
+        return;
+      }
+
+      throw new Error(
+        "Upload failed"
+      );
+    }
+
+    showToast(
+      "Knowledge uploaded"
+    );
+
+    await loadKnowledge();
+
+  } catch (error) {
+
+    console.error(
+      "Knowledge upload failed:",
+      error
+    );
+
+    showToast(
+      "Could not upload knowledge"
+    );
 
   } finally {
 
-    input.value = "";
+    fileInput.value = "";
 
   }
 }
+
 
 /* =========================================================
    SETTINGS
    ========================================================= */
 
-function showSettings(section, button) {
+function showSettings(
+  section,
+  button
+) {
 
-  document.querySelectorAll(".settings-section")
-    .forEach(el => el.classList.remove("active"));
+  document
+    .querySelectorAll(
+      ".settings-section"
+    )
+    .forEach(el => {
 
-  document.querySelectorAll(".settings-nav button")
-    .forEach(el => el.classList.remove("active"));
+      el.classList.remove(
+        "active"
+      );
+
+    });
+
+  document
+    .querySelectorAll(
+      ".settings-nav button"
+    )
+    .forEach(el => {
+
+      el.classList.remove(
+        "active"
+      );
+
+    });
 
   const target =
-    document.getElementById("settings-" + section);
+    document.getElementById(
+      "settings-" + section
+    );
 
   if (target) {
-    target.classList.add("active");
+
+    target.classList.add(
+      "active"
+    );
+
   }
 
   if (button) {
-    button.classList.add("active");
+
+    button.classList.add(
+      "active"
+    );
+
   }
 }
 
-function setInterfaceLanguage(language) {
 
-  state.interfaceLanguage = language;
+function setInterfaceLanguage(
+  language
+) {
+
+  state.interfaceLanguage =
+    language;
 
   localStorage.setItem(
     "miri_interface_language",
     language
   );
 
-  applyInterfaceDirection(language);
+  applyInterfaceDirection(
+    language
+  );
 
-  showToast("Interface language preference saved");
+  showToast(
+    "Interface language preference saved"
+  );
 }
 
-function applyInterfaceDirection(language) {
 
-  const rtlLanguages = ["ar", "he", "fa", "ur"];
+function applyInterfaceDirection(
+  language
+) {
 
-  if (rtlLanguages.includes(language)) {
+  const rtlLanguages = [
+    "ar",
+    "he",
+    "fa",
+    "ur"
+  ];
 
-    document.documentElement.dir = "rtl";
+  if (
+    rtlLanguages.includes(language)
+  ) {
+
+    document.documentElement.dir =
+      "rtl";
 
   } else {
 
-    document.documentElement.dir = "ltr";
+    document.documentElement.dir =
+      "ltr";
 
   }
 
-  document.documentElement.lang = language;
+  document.documentElement.lang =
+    language;
 }
 
-function saveWorkspaceName(name) {
 
-  const clean = name.trim() || "Your Workspace";
+function saveWorkspaceName(
+  name
+) {
 
-  state.workspaceName = clean;
+  const clean =
+    name.trim() ||
+    "Your Workspace";
+
+  state.workspaceName =
+    clean;
 
   localStorage.setItem(
     "miri_workspace_name",
     clean
   );
 
-  document.getElementById("workspace-name").textContent =
-    clean;
+  const workspaceName =
+    document.getElementById(
+      "workspace-name"
+    );
 
-  showToast("Workspace name saved");
-}
+  if (workspaceName) {
 
-/* =========================================================
-   TOAST
-   ========================================================= */
+    workspaceName.textContent =
+      clean;
 
-let toastTimer = null;
-
-function showToast(message) {
-
-  const toast = document.getElementById("toast");
-
-  toast.textContent = message;
-  toast.classList.add("show");
-
-  clearTimeout(toastTimer);
-
-  toastTimer = setTimeout(() => {
-    toast.classList.remove("show");
-  }, 2200);
-}
-
-/* =========================================================
-   UTILITIES
-   ========================================================= */
-
-function setText(id, value) {
-
-  const element = document.getElementById(id);
-
-  if (element) {
-    element.textContent = value;
   }
+
+  showToast(
+    "Workspace name saved"
+  );
 }
 
-function escapeHtml(value) {
-
-  const div = document.createElement("div");
-
-  div.textContent = String(value ?? "");
-
-  return div.innerHTML;
-}
-
-function escapeAttr(value) {
-
-  return String(value ?? "")
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'");
-}
 
 /* =========================================================
-   INITIALIZATION
+   ADMIN ACCESS
    ========================================================= */
 
-function initialize() {
+function openAdminTokenSettings() {
 
-  applyTheme();
+  const token =
+    prompt(
+      "Enter your Miri admin token:"
+    );
 
-  applyInterfaceDirection(
-    state.interfaceLanguage
+  if (!token) {
+    return;
+  }
+
+  const clean =
+    token.trim();
+
+  if (!clean) {
+    return;
+  }
+
+  localStorage.setItem(
+    "miri_admin_token",
+    clean
   );
 
-  document.getElementById(
-    "interface-language"
-  ).value = state.interfaceLanguage;
+  showToast(
+    "Admin access saved"
+  );
 
-  document.getElementById(
-    "workspace-input"
-  ).value = state.workspaceName;
+  if (
+    state.currentView ===
+    "conversations"
+  ) {
 
-  document.getElementById(
-    "workspace-name"
-  ).textContent = state.workspaceName;
+    loadConversations();
 
-  updateSendButton();
+  }
 
-  input.focus();
+  if (
+    state.currentView ===
+    "knowledge"
+  ) {
 
-  /*
-   * Keep the dashboard metrics fresh while the app is open.
-   */
-  loadStats();
+    loadKnowledge();
 
-  setInterval(() => {
-
-    if (
-      state.currentView === "dashboard" ||
-      state.currentView === "analytics"
-    ) {
-      loadStats();
-    }
-
-  }, 5000);
+  }
 }
-
-initialize();
-</script>
-
-</body>
-</html>
