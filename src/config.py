@@ -34,8 +34,8 @@ LOGS_DIR.mkdir(exist_ok=True)
 # --------------------------------------------------
 # Retriever Configuration
 # --------------------------------------------------
-TOP_K_RESULTS = 3
-MIN_SCORE_THRESHOLD = 0.1
+TOP_K_RESULTS = int(os.getenv("TOP_K_RESULTS", "3"))
+MIN_SCORE_THRESHOLD = float(os.getenv("MIN_SCORE_THRESHOLD", "0.1"))
 STOP_WORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
     "has", "he", "in", "is", "it", "its", "of", "on", "that", "the",
@@ -47,7 +47,7 @@ STOP_WORDS = {
 # Logging Configuration
 # --------------------------------------------------
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-LOG_FILE = LOGS_DIR / "app.log"
+LOG_FILE = LOGS_DIR / os.getenv("LOG_FILE", "app.log")
 
 # --------------------------------------------------
 # AI Configuration (Phase 2: LLM Integration)
@@ -55,9 +55,9 @@ LOG_FILE = LOGS_DIR / "app.log"
 # Using Groq (free tier, no credit card required) instead of paid OpenAI.
 # Groq's API is OpenAI-compatible, so the same 'openai' Python package works —
 # we just point it at Groq's server (OPENAI_BASE_URL) instead of OpenAI's.
-DEFAULT_MODEL = "openai/gpt-oss-20b"
-TEMPERATURE = 0.2
-MAX_TOKENS = 1000
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "openai/gpt-oss-20b")
+TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
+MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "1000"))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
 
